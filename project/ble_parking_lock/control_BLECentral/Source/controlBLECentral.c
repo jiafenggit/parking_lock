@@ -403,7 +403,7 @@ void SimpleBLECentral_Init( uint8 task_id )
   RegisterForKeys( controlBLETaskId );
   register_for_uart_debug(controlBLETaskId);
   
-  owner_addr_init(net_src_mac);
+ // owner_addr_init(net_src_mac);
   
   app_net_init();
   app_start_net();
@@ -1278,6 +1278,7 @@ static void controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         }
       }
         */
+      }
       app_write_string("\r\n完成一个扫描周期事件!");  
       osal_start_timerEx(controlBLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);//0.1s
       break;

@@ -165,10 +165,12 @@ static void dhcp_msg_param_init(dhcp_msg_t *ptr_msg,uint8 msg_type)
  ptr_msg->msg_id=discover_msg_id;
  
  ptr_msg->options[i++]=DHCP_REQUEST_PARAM;
- ptr_msg->options[i++]=3;
+ ptr_msg->options[i++]=5;
  ptr_msg->options[i++]=DHCP_REQUEST_IP;
  ptr_msg->options[i++]=DHCP_SUBMASK_ID;
  ptr_msg->options[i++]=DHCP_ROUTER_IP;
+ ptr_msg->options[i++]=DHCP_RENEWAL_TIME;
+ ptr_msg->options[i++]=DHCP_IP_LEASE_TIME;
  ptr_msg->options[i++]=DHCP_END_OPTION;
   }
  break;
@@ -261,7 +263,7 @@ uint8 dhcp_process_ack()
   else
   {
     app_write_string("\r\n没有在ack的opt中发现的发现 ip renewal time!");    
-    return NOT_FOUND_ERROR;
+   // return NOT_FOUND_ERROR;
    }
     
     
@@ -278,6 +280,7 @@ uint8 dhcp_process_ack()
    uint8_array_to_string(s_dhcp_ip,4);
    app_write_string("\r\n IP renewal time:");
    uint8_array_to_string(a_renewal_time,4);
+   
    return SUCCESS;
   }
  else if(dhcp_find_opt_msg_type(addr_opt,DHCP_MSG_TYPE_NACK))
@@ -374,18 +377,7 @@ uint8 dhcp_process_offer()
     return NOT_FOUND_ERROR;
    }
   
-  ptr_addr=NULL;
-  ptr_addr=dhcp_find_options(addr_opt,DHCP_IP_LEASE_TIME,&value_len);//lease time
-  if(ptr_addr && value_len==4)
-  {
-    osal_mem_cpy(a_lease_time,ptr_addr,value_len);
-    app_write_string("\r\n在opt中发现 ip lease time并保存!");
-   }
-  else
-  {
-    app_write_string("\r\n没有在opt中发现的发现 ip lease time!");    
-    return NOT_FOUND_ERROR;
-   }
+ 
   
   ptr_addr=NULL;
   ptr_addr=dhcp_find_options(addr_opt,DHCP_RENEWAL_TIME,&value_len);//renewal time
@@ -400,6 +392,27 @@ uint8 dhcp_process_offer()
   else
   {
     app_write_string("\r\n没有在opt中发现的发现 ip renewal time!");    
+   // return NOT_FOUND_ERROR;
+   }
+  
+  ptr_addr=NULL;
+  ptr_addr=dhcp_find_options(addr_opt,DHCP_IP_LEASE_TIME,&value_len);//lease time
+  if(ptr_addr && value_len==4)
+  {
+    osal_mem_cpy(a_lease_time,ptr_addr,value_len);
+    app_write_string("\r\n在opt中发现 ip lease time并保存!");
+    
+    if(ip_renewal_timeout==0)
+    {
+    ip_renewal_timeout=a_lease_time[0]*((uint32)1<<24)+a_lease_time[1]*((uint32)1<<16)+a_lease_time[2]*((uint16)1<<8)+a_lease_time[3];
+    ip_renewal_timeout*=500;//除2后转换成ms
+    app_write_string("\r\n从leasetime 转换renewal time并保存:");
+    uint16_to_string(ip_renewal_timeout);
+    }
+   }
+  else
+  {
+    app_write_string("\r\n没有在opt中发现的发现 ip lease time!");    
     return NOT_FOUND_ERROR;
    }
   
@@ -413,7 +426,7 @@ uint8 dhcp_process_offer()
   else
   {
     app_write_string("\r\n没有在opt中发现的发现 ip rebind time!");    
-    return NOT_FOUND_ERROR;
+   // return NOT_FOUND_ERROR;
    }
   
   }
@@ -540,7 +553,8 @@ static void dhcp_process_reply_msg()
   {
     if(dhcp_process_offer()==SUCCESS)
     {
-     dhcp_state=DHCP_STATE_REQUEST;            
+     dhcp_state=DHCP_STATE_REQUEST;  
+     dhcp_send_msg_procedure(); 
     }
     
   }
@@ -551,23 +565,17 @@ static void dhcp_process_reply_msg()
      dhcp_state=DHCP_STATE_COMPLETE;
      //to do 
      dhcp_new_ip_flag++;//更新ip标志
+     dhcp_send_msg_procedure(); 
      
     }
-    else
-    {
-     dhcp_socket_close();//重新dhcp  
-    }
-
   } 
-  
-  
-  if(dhcp_state==DHCP_STATE_COMPLETE)
+  else if(dhcp_state==DHCP_STATE_COMPLETE)
   {   
     app_write_string("\r\ndhcp 忽略reply msg dhcp 已经完成了!");   
   }
   else
   {
-   dhcp_send_msg_procedure(); 
+    app_write_string("\r\ndhcp replay error still to wait...");
   }
   
 }
