@@ -86,7 +86,7 @@
 #define DEFAULT_MAX_SCAN_RES                  8
 
 // Scan duration in ms
-#define DEFAULT_SCAN_DURATION                 300
+#define DEFAULT_SCAN_DURATION                 6000
 
 // Discovey mode (limited, general, all)
 #define DEFAULT_DISCOVERY_MODE               DEVDISC_MODE_ALL
@@ -119,7 +119,7 @@
 #define DEFAULT_UPDATE_SLAVE_LATENCY           0
 
 // Supervision timeout value (units of 10ms) if automatic parameter update request is enabled
-#define DEFAULT_UPDATE_CONN_TIMEOUT           200 
+#define DEFAULT_UPDATE_CONN_TIMEOUT           250 
 
 // Default passcode
 #define DEFAULT_PASSCODE                      19655
@@ -143,7 +143,7 @@
 #define DEFAULT_DEV_DISC_BY_SVC_UUID          FALSE  //TRUE
 
 
-#define  DEFAULT_START_TO_SCAN_DELAY          100//wkxboot in ms
+#define  DEFAULT_START_TO_SCAN_DELAY          10//wkxboot in ms
 
    
    
@@ -259,7 +259,7 @@ static bool simpleBLEProcedureInProgress = FALSE;
 uint8 owner_id[6]={0x11,0x22,0x33,0x44,0x55,0x66};
 //discovery target ble addr
 uint8 ble_tar_addr[6];
-uint8 ble_match_addr[DAFAULT_ADDR_MATCH_LEN]={0xEC,0x24,0xB8};
+uint8 ble_match_addr[DAFAULT_ADDR_MATCH_LEN]={0x68,0xc9,0x0b};//{0xEC,0x24,0xB8};
 
 ble_device_t lock_in_info,car_in_info;
 time_stamp_t time_stamp_info;
@@ -372,6 +372,11 @@ void SimpleBLECentral_Init( uint8 task_id )
   // Setup GAP
   GAP_SetParamValue( TGAP_GEN_DISC_SCAN, DEFAULT_SCAN_DURATION );
   GAP_SetParamValue( TGAP_LIM_DISC_SCAN, DEFAULT_SCAN_DURATION );
+  
+  GAP_SetParamValue(TGAP_CONN_EST_INT_MIN,DEFAULT_UPDATE_MIN_CONN_INTERVAL);
+  GAP_SetParamValue(TGAP_CONN_EST_INT_MAX,DEFAULT_UPDATE_MAX_CONN_INTERVAL);
+  GAP_SetParamValue(TGAP_CONN_EST_LATENCY,DEFAULT_UPDATE_SLAVE_LATENCY);
+  GAP_SetParamValue( TGAP_CONN_EST_SUPERV_TIMEOUT,DEFAULT_UPDATE_CONN_TIMEOUT);
 
   GGS_SetParameter( GGS_DEVICE_NAME_ATT, GAP_DEVICE_NAME_LEN, (uint8 *) simpleBLEDeviceName );
 
@@ -1200,7 +1205,7 @@ static void controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         app_write_string("\r\nble4.0设备control初始化完成!");
         app_write_string("\r\n本机设备地址:");
         app_write_string(bdAddr2Str(pEvent->initDone.devAddr));
-        own_addr_minus_1_to_peer_addr(pEvent->initDone.devAddr,ble_tar_addr);
+       // own_addr_minus_1_to_peer_addr(pEvent->initDone.devAddr,ble_tar_addr);
        // owner_info_init(pEvent->initDone.devAddr);
         app_write_string("\r\n1秒钟后开始第一次扫描!");
         osal_start_timerEx(controlBLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);//1s
@@ -1214,19 +1219,20 @@ static void controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         
         // if filtering device discovery results based on service UUID
         
-        if(ble_addr_is_match(pEvent->deviceInfo.addr,ble_tar_addr))
+        app_write_string("\r\n发现的数据值:");
+        uint8_array_to_string(pEvent->deviceInfo.pEvtData,pEvent->deviceInfo.dataLen);
+        
+        if(ble_addr_is_match(pEvent->deviceInfo.addr,ble_match_addr))
         {
-          //simpleBLEAddDeviceInfo( pEvent->deviceInfo.addr, pEvent->deviceInfo.addrType );
-         
-          //app_write_string("\r\n添加到设备列表!");
-          
+          osal_memcpy(ble_tar_addr,pEvent->deviceInfo.addr,B_ADDR_LEN);//拷贝目标地址
+          //simpleBLEAddDeviceInfo( pEvent->deviceInfo.addr, pEvent->deviceInfo.addrType );        
+          app_write_string("\r\n目标正确!");
           wkxboot_stop_discover();//关闭扫描
           wkxboot_connect();//直接连接
-          
         }
         else
         {
-          app_write_string("\r\n跳过..继续扫描...");
+         app_write_string("\r\n目标错误跳过..继续扫描..."); 
         }
         /*
         if ( DEFAULT_DEV_DISC_BY_SVC_UUID == TRUE )
@@ -1280,6 +1286,9 @@ static void controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         */
       }
       app_write_string("\r\n完成一个扫描周期事件!");  
+      if(simpleBLEState != BLE_STATE_IDLE)
+      app_write_string("\r\n有个链接事件停止扫描!"); 
+      else
       osal_start_timerEx(controlBLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);//0.1s
       break;
 
@@ -1762,9 +1771,10 @@ static void ble_control_handle_send_queue()
   msg_node_t *ptr_search_node;
   
   app_write_string("\r\n周期轮询发送队列!");
-  if(net_socket_status!= SOCKET_ESTABLISHED)
+  
+  if(net_socket_status!= SOCKET_UDP)//SOCKET_ESTABLISHED)
   {
-   app_write_string("\r\n网络未与服务器建立连接,周期轮询发送队列over!");
+   app_write_string("\r\n网络未初始化为UDP,无法与服务器通信!周期轮询发送队列over!");
    return ;
   }
   ptr_search_node=hdr_send_queue;

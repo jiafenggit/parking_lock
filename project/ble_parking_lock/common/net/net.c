@@ -118,8 +118,10 @@ static void net_socket_status_change_callback(uint8 new_status)
   {
    app_write_string("\r\nnet socket udp!");
    osal_mem_cpy(ptr_net_buff,"hello,wkxboot! net udp init!",32);
-   while(socket_send_to(NET_SOCKET,net_dst_ip,net_dst_port,ptr_net_buff,32)!=SUCCESS);
-   app_write_string("\r\n发送hello,wkxboot! net udp init!");
+   //while(socket_send_to(NET_SOCKET,net_dst_ip,net_dst_port,ptr_net_buff,32)!=SUCCESS);
+   socket_send(NET_SOCKET,"直接使用udp",12);
+   socket_send(NET_SOCKET,"再次直接使用udp",16);
+   app_write_string("\r\n发送hello,wkxboot! net udp init!&other");
   }
   if(new_status==SOCKET_INIT)   
   {
