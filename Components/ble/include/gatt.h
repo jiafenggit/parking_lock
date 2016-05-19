@@ -1,7 +1,7 @@
 /**
   @headerfile:       gatt.h
-  $Date: 2013-09-05 11:19:58 -0700 (Thu, 05 Sep 2013) $
-  $Revision: 35219 $
+  $Date: 2015-05-01 15:40:56 -0700 (Fri, 01 May 2015) $
+  $Revision: 43639 $
 
   @mainpage BLE GATT API
 
@@ -12,7 +12,7 @@
 
   \htmlinclude GATTDesc.html
 
-  Copyright 2009-2013 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2009-2015 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -90,11 +90,12 @@ extern "C"
 /** @} End GATT_NUM_PREPARE_WRITES_DEFINES */
 
 
-/** @defgroup GATT_ENCRYPT_KEY_SIZE_DEFINES GATT Encryption Key Size
+/** @defgroup GATT_ENCRYPT_KEY_SIZE_DEFINES GATT Encryption Key Size Limits
  * @{
  */
 
-#define GATT_ENCRYPT_KEY_SIZE            16 //!< GATT Encryption Key Size used for encrypting a link
+#define GATT_MIN_ENCRYPT_KEY_SIZE          7  //!< GATT Minimum Encryption Key Size
+#define GATT_MAX_ENCRYPT_KEY_SIZE          16 //!< GATT Maximum Encryption Key Size
 
 /** @} End GATT_ENCRYPT_KEY_SIZE_DEFINES */
 
@@ -106,11 +107,8 @@ extern "C"
 #define GATT_MAX_ATTR_SIZE               512 //!< GATT Maximum length of an attribute value
 
 /** @} End GATT_MAX_ATTR_SIZE_DEFINES */
-
-// GATT Maximum number of connections (including loopback)
-#define GATT_MAX_NUM_CONN                ( MAX_NUM_LL_CONN + 1 )
-
- // GATT Base Method
+  
+// GATT Base Method
 #define GATT_BASE_METHOD                 0x40
 
 // Attribute handle defintions
@@ -118,6 +116,8 @@ extern "C"
 #define GATT_MIN_HANDLE                  0x0001 // Minimum attribute handle
 #define GATT_MAX_HANDLE                  0xFFFF // Maximum attribute handle
 
+#define GATT_MAX_MTU                     0xFFFF // Maximum MTU size
+  
 /*********************************************************************
  * VARIABLES
  */
@@ -151,7 +151,17 @@ extern "C"
 /*********************************************************************
  * TYPEDEFS
  */
-  
+
+/**
+ * GATT Find By Type Value Request format.
+ */
+typedef struct
+{
+  uint16 startHandle;  //!< First requested handle number (must be first field)
+  uint16 endHandle;    //!< Last requested handle number
+  attAttrType_t value; //!< Primary service UUID value (2 or 16 octets)
+} gattFindByTypeValueReq_t;
+
 /**
  * GATT Read By Type Request format.
  */
@@ -162,24 +172,13 @@ typedef struct
 } gattReadByTypeReq_t;
 
 /**
- * GATT Prepare Write Request format.
- */
-typedef struct
-{
-  uint16 handle; //!< Handle of the attribute to be written (must be first field)
-  uint16 offset; //!< Offset of the first octet to be written
-  uint8 len;     //!< Length of value
-  uint8 *pValue; //!< Part of the value of the attribute to be written (must be allocated)
-} gattPrepareWriteReq_t;
-
-/**
  * GATT Write Long Request format. Do not change the order of the members.
  */
 typedef struct
 {
-  uint8 reliable;            //!< Whether reliable writes requested (always FALSE for Write Long)
-  gattPrepareWriteReq_t req; //!< GATT Prepare Write Request
-  uint16 lastOffset;         //!< Offset of last Prepare Write Request sent
+  uint8 reliable;           //!< Whether reliable writes requested (always FALSE for Write Long)
+  attPrepareWriteReq_t req; //!< ATT Prepare Write Request
+  uint16 lastOffset;        //!< Offset of last Prepare Write Request sent
 } gattWriteLongReq_t;
 
 /**
@@ -197,7 +196,8 @@ typedef struct
 
 /**
  * GATT Message format. It's a union of all attribute protocol/profile messages
- * used between the attribute protocol/profile and upper layer application.
+ * and locally-generated events used between the attribute protocol/profile and
+ * upper layer application.
  */
 typedef union
 {
@@ -213,6 +213,7 @@ typedef union
   attWriteReq_t writeReq;                          //!< ATT Write Request
   attPrepareWriteReq_t prepareWriteReq;            //!< ATT Prepare Write Request
   attExecuteWriteReq_t executeWriteReq;            //!< ATT Execute Write Request
+  gattFindByTypeValueReq_t gattFindByTypeValueReq; //!< GATT Find By Type Vaue Request
   gattReadByTypeReq_t gattReadByTypeReq;           //!< GATT Read By Type Request
   gattWriteLongReq_t gattWriteLongReq;             //!< GATT Long Write Request
   gattReliableWritesReq_t gattReliableWritesReq;   //!< GATT Reliable Writes Request
@@ -232,6 +233,10 @@ typedef union
   // Indication and Notification messages
   attHandleValueNoti_t handleValueNoti;            //!< ATT Handle Value Notification
   attHandleValueInd_t handleValueInd;              //!< ATT Handle Value Indication
+  
+  // Locally-generated event messages
+  attFlowCtrlViolatedEvt_t flowCtrlEvt;            //!< ATT Flow Control Violated Event
+  attMtuUpdatedEvt_t mtuEvt;                       //!< ATT MTU Updated Event
 } gattMsg_t;
 
 /**
@@ -274,7 +279,8 @@ typedef struct attAttribute_t
 typedef struct
 {
   uint16 numAttrs; //!< Number of attributes in attrs
-
+  uint8 encKeySize;//!< Minimum encryption key size required by service (7-16 bytes)
+  
   /** Array of attribute records. 
    *  NOTE: The list must start with a Service attribute followed by
    *        all attributes associated with this Service attribute. 
@@ -285,6 +291,8 @@ typedef struct
 /*********************************************************************
  * VARIABLES
  */
+
+extern uint8 gattNumConns;
 
 /*********************************************************************
  * API FUNCTIONS
@@ -303,7 +311,8 @@ typedef struct
 /**
  * @brief   Initialize the Generic Attribute Profile Client.
  *
- * @return  SUCCESS
+ * @return  SUCCESS: Client initialized successfully.<BR>
+ *          bleMemAllocError: Memory allocation error occurred.<BR>
  */
 extern bStatus_t GATT_InitClient( void );
 
@@ -375,7 +384,8 @@ extern bStatus_t GATT_ExecuteWriteReq( uint16 connHandle, attExecuteWriteReq_t *
 /**
  * @brief   Initialize the Generic Attribute Profile Server.
  *
- * @return  SUCCESS
+ * @return  SUCCESS: Server initialized successfully.<BR>
+ *          bleMemAllocError: Memory allocation error occurred.<BR>
  */
 extern bStatus_t GATT_InitServer( void );
 
@@ -403,6 +413,7 @@ extern bStatus_t GATT_InitServer( void );
  *          INVALIDPARAMETER: Invalid service field.<BR>
  *          FAILURE: Not enough attribute handles available.<BR>
  *          bleMemAllocError: Memory allocation error occurred.<BR>
+ *          bleInvalidRange: Encryption key size's out of range.<BR>
  */
 extern bStatus_t GATT_RegisterService( gattService_t *pService );
 
@@ -434,6 +445,7 @@ extern void GATT_RegisterForReq( uint8 taskId );
  *
  * @param   connHandle - connection to use
  * @param   permissions - attribute permissions
+ * @param   service - service handle
  *
  * @return  SUCCESS: Attribute can be read.<BR>
  *          ATT_ERR_READ_NOT_PERMITTED: Attribute cannot be read.<BR>
@@ -441,13 +453,14 @@ extern void GATT_RegisterForReq( uint8 taskId );
  *          ATT_ERR_INSUFFICIENT_KEY_SIZE: Key Size used for encrypting is insufficient.<BR>
  *          ATT_ERR_INSUFFICIENT_ENCRYPT: Attribute requires encryption.<BR>
  */
-extern bStatus_t GATT_VerifyReadPermissions( uint16 connHandle, uint8 permissions );
+extern bStatus_t GATT_VerifyReadPermissions( uint16 connHandle, uint8 permissions, uint16 service );
 
 /**
  * @brief   Verify the permissions of an attribute for writing.
  *
  * @param   connHandle - connection to use
  * @param   permissions - attribute permissions
+ * @param   service - service handle
  * @param   pReq - pointer to write request
  *
  * @return  SUCCESS: Attribute can be written.<BR>
@@ -456,7 +469,8 @@ extern bStatus_t GATT_VerifyReadPermissions( uint16 connHandle, uint8 permission
  *          ATT_ERR_INSUFFICIENT_KEY_SIZE: Key Size used for encrypting is insufficient.<BR>
  *          ATT_ERR_INSUFFICIENT_ENCRYPT: Attribute requires encryption.<BR>
  */
-extern bStatus_t GATT_VerifyWritePermissions( uint16 connHandle, uint8 permissions, attWriteReq_t *pReq );
+extern bStatus_t GATT_VerifyWritePermissions( uint16 connHandle, uint8 permissions,
+                                              uint16 service, attWriteReq_t *pReq );
 
 /**
  * @brief   Send out a Service Changed Indication.
@@ -509,13 +523,22 @@ extern gattAttribute_t *GATT_FindHandle( uint16 handle, uint16 *pHandle );
 extern gattAttribute_t *GATT_FindNextAttr( gattAttribute_t *pAttr, uint16 endHandle,
                                            uint16 service, uint16 *pLastHandle );
 /**
- * @brief   Get the number of attributes for a given service
+ * @brief   Get the number of attributes for a given service.
  *
  * @param   handle - service handle to look for
  * 
- * @return  Number of attributes. 0, otherwise.
+ * @return  Number of attributes if service found. 0, otherwise.
  */
 extern uint16 GATT_ServiceNumAttrs( uint16 handle );
+
+/**
+ * @brief   Get the minimum encryption key size required by a given service.
+ *
+ * @param   handle - service handle to look for
+ *
+ * @return  Encryption key size if service found. Default key size, otherwise.
+ */
+extern uint8 GATT_ServiceEncKeySize( uint16 handle );
 
 /**
  * @}
@@ -690,7 +713,7 @@ extern bStatus_t GATT_DiscAllPrimaryServices( uint16 connHandle, uint8 taskId );
  *                (with SUCCESS status) is received by the calling application task.
  *
  * @param   connHandle - connection to use
- * @param   pValue - pointer to value to look for
+ * @param   pUUID - pointer to service UUID to look for
  * @param   len - length of value
  * @param   taskId - task to be notified of response
  *
@@ -702,7 +725,7 @@ extern bStatus_t GATT_DiscAllPrimaryServices( uint16 connHandle, uint8 taskId );
  *          bleMemAllocError: Memory allocation error occurred.<BR>
  *          bleTimeout: Previous transaction timed out.<BR>
  */
-extern bStatus_t GATT_DiscPrimaryServiceByUUID( uint16 connHandle, uint8 *pValue,
+extern bStatus_t GATT_DiscPrimaryServiceByUUID( uint16 connHandle, uint8 *pUUID,
                                                 uint8 len, uint8 taskId );
 /**
  * @brief   This sub-procedure is used by a client to find include
@@ -1125,7 +1148,7 @@ extern bStatus_t GATT_WriteCharValue( uint16 connHandle, attWriteReq_t *pReq, ui
  *          bleMemAllocError: Memory allocation error occurred.<BR>
  *          bleTimeout: Previous transaction timed out.<BR>
  */
-extern bStatus_t GATT_WriteLongCharValue( uint16 connHandle, gattPrepareWriteReq_t *pReq, uint8 taskId );
+extern bStatus_t GATT_WriteLongCharValue( uint16 connHandle, attPrepareWriteReq_t *pReq, uint8 taskId );
 
 /**
  * @brief   This sub-procedure is used to write a Characteristic Value to
@@ -1311,7 +1334,72 @@ extern bStatus_t GATT_WriteCharDesc( uint16 connHandle, attWriteReq_t *pReq, uin
  *          bleMemAllocError: Memory allocation error occurred.<BR>
  *          bleTimeout: Previous transaction timed out.<BR>
  */
-extern bStatus_t GATT_WriteLongCharDesc( uint16 connHandle, gattPrepareWriteReq_t *pReq, uint8 taskId );
+extern bStatus_t GATT_WriteLongCharDesc( uint16 connHandle, attPrepareWriteReq_t *pReq, uint8 taskId );
+
+/**
+ * @}
+ */
+
+/*-------------------------------------------------------------------
+ * GATT Client and Server Common APIs
+ */
+
+/**
+ * @defgroup GATT_COMMON_API Client and Server Common API Functions
+ * 
+ * @{
+ */
+
+/**
+ *
+ * @brief   Update ATT_MTU size for a given connection.
+ *
+ * @param   connHandle - connection handle.<BR>
+ * @param   clientRxMTU - client Rx MTU size.<BR>
+ * @param   serverRxMTU - server Rx MTU size.<BR>
+ *
+ * @return  none.
+ */
+void GATT_UpdateMTU( uint16 connHandle, uint16 clientRxMTU, uint16 serverRxMTU );
+
+/**
+ * @}
+ */
+
+/*-------------------------------------------------------------------
+ * GATT Buffer Management APIs
+ */
+
+/**
+ * @defgroup GATT_BM_API GATT Buffer Management API Functions
+ * 
+ * @{
+ */
+
+/**
+ * @brief   GATT implementation of the allocator functionality.
+ *
+ *          Note: This function should only be called by GATT and
+ *                the upper layer protocol/application.
+ *
+ * @param   connHandle - connection that message is to be sent on.
+ * @param   opcode - opcode of message that buffer to be allocated for.
+ * @param   size - number of bytes to allocate from the heap.
+ * @param   pSizeAlloc - number of bytes allocated for the caller from the heap.
+ *
+ * @return  pointer to the heap allocation; NULL if error or failure.
+ */
+extern void *GATT_bm_alloc( uint16 connHandle, uint8 opcode, uint16 size, uint16 *pSizeAlloc );
+
+/**
+ * @brief   GATT implementation of the de-allocator functionality.
+ *
+ * @param   pMsg - pointer to GATT message containing the memory to free.
+ * @param   opcode - opcode of the message
+ *
+ * @return  none
+ */
+extern void GATT_bm_free( gattMsg_t *pMsg, uint8 opcode );
 
 /**
  * @}
@@ -1335,11 +1423,12 @@ extern bStatus_t GATT_WriteLongCharDesc( uint16 connHandle, gattPrepareWriteReq_
  *                call the GATT_AppCompletedMsg() API when it completes 
  *                processing an incoming GATT message.
  *
+ * @param   heapSize - internal heap size
  * @param   flowCtrlMode – flow control mode: TRUE or FALSE
  *
  * @return  void
  */
-extern void GATT_SetHostToAppFlowCtrl( uint8 flowCtrlMode );
+extern void GATT_SetHostToAppFlowCtrl( uint16 heapSize, uint8 flowCtrlMode );
 
 /**
  * @brief   This API is used by the Application to notify GATT that
@@ -1369,6 +1458,17 @@ extern void GATT_AppCompletedMsg( gattMsgEvent_t *pMsg );
    * @return      none
    */
 extern void GATT_SetNextHandle( uint16 handle );
+
+  /**
+   * @internal
+   *
+   * @brief       Return the next available attribute handle.
+   *
+   * @param       none
+   *
+   * @return      next attribute handle
+   */
+extern uint16 GATT_GetNextHandle( void );
 
 /*-------------------------------------------------------------------
  * TASK API - These functions must only be called by OSAL.

@@ -25,7 +25,7 @@
   Reference: @ref GAPBOND_PROFILE_PARAMETERS <BR><BR>
 
 
-  Copyright 2010-2013 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2010-2015 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -132,9 +132,11 @@ extern "C"
 #define GAPBOND_KEYDIST_SENCKEY                  0x01  //!< Slave Encryption Key
 #define GAPBOND_KEYDIST_SIDKEY                   0x02  //!< Slave IRK and ID information
 #define GAPBOND_KEYDIST_SSIGN                    0x04  //!< Slave CSRK
-#define GAPBOND_KEYDIST_MENCKEY                  0x08  //!< Master Encrypton Key
-#define GAPBOND_KEYDIST_MIDKEY                   0x10  //!< Master IRK and ID information
-#define GAPBOND_KEYDIST_MSIGN                    0x20  //!< Master CSRK
+#define GAPBOND_KEYDIST_SLINK                    0x08  //!< Slave Link Key
+#define GAPBOND_KEYDIST_MENCKEY                  0x10  //!< Master Encrypton Key
+#define GAPBOND_KEYDIST_MIDKEY                   0x20  //!< Master IRK and ID information
+#define GAPBOND_KEYDIST_MSIGN                    0x40  //!< Master CSRK
+#define GAPBOND_KEYDIST_MLINK                    0x80  //!< Master Link Key
 /** @} End GAPBOND_IO_CAP_DEFINES */
 
 
@@ -144,6 +146,7 @@ extern "C"
 #define GAPBOND_PAIRING_STATE_STARTED             0x00  //!< Pairing started
 #define GAPBOND_PAIRING_STATE_COMPLETE            0x01  //!< Pairing complete
 #define GAPBOND_PAIRING_STATE_BONDED              0x02  //!< Devices bonded
+#define GAPBOND_PAIRING_STATE_BOND_SAVED          0x03  //!< Bonding record saved in NV
 /** @} End GAPBOND_PAIRING_STATE_DEFINES */
 
 /** @defgroup SMP_PAIRING_FAILED_DEFINES Pairing failure status values
@@ -268,6 +271,30 @@ extern bStatus_t GAPBondMgr_GetParameter( uint16 param, void *pValue );
  * @return      SUCCESS, otherwise failure
  */
 extern bStatus_t GAPBondMgr_LinkEst( uint8 addrType, uint8 *pDevAddr, uint16 connHandle, uint8 role );
+
+/**
+ * @brief       Notify the Bond Manager that a connection has been terminated.
+ *
+ *   NOTE:      The GAP Peripheral/Central Role profile will
+ *              call this function, if they are included in the project.
+ *
+ * @param       connHandle - connection handle
+ *
+ * @return      none
+ */
+extern void GAPBondMgr_LinkTerm(uint16 connHandle);
+
+/*********************************************************************
+ * @brief       Notify the Bond Manager that a Slave Security Request is received.
+ *
+ *   NOTE:      The GAP Central Role profile will call this function,
+ *              if it is included in the project.
+ *
+ * @param       connHandle - connection handle
+ *
+ * @return      none
+ */
+extern void GAPBondMgr_SlaveReqSecurity(uint16 connHandle);
 
 /**
  * @brief       Resolve an address from bonding information.

@@ -1,7 +1,7 @@
 /**************************************************************************************************
   Filename:       OSAL_Nv.h
-  Revised:        $Date: 2011-05-31 09:28:05 -0700 (Tue, 31 May 2011) $
-  Revision:       $Revision: 26152 $
+  Revised:        $Date: 2014-10-06 15:40:15 -0700 (Mon, 06 Oct 2014) $
+  Revision:       $Revision: 40448 $
 
   Description:    This module defines the OSAL non-volatile memory functions.
 
@@ -100,6 +100,34 @@ extern uint16 osal_nv_item_len( uint16 id );
  * Delete an NV item.
  */
 extern uint8 osal_nv_delete( uint16 id, uint16 len );
+
+#if defined ( OSAL_NV_EXTENDED )
+/*
+ * Initialize an item in NV (extended format)
+ */
+extern uint8 osal_nv_item_init_ex( uint16 id, uint16 subId, uint16 len, void *buf );
+
+/*
+ * Read an NV attribute (extended format)
+ */
+extern uint8 osal_nv_read_ex( uint16 id, uint16 subId, uint16 offset, uint16 len, void *buf );
+
+/*
+ * Write an NV attribute (extended format)
+ */
+extern uint8 osal_nv_write_ex( uint16 id, uint16 subId, uint16 offset, uint16 len, void *buf );
+
+/*
+ * Get the length of an NV item (extended format).
+ */
+extern uint16 osal_nv_item_len_ex( uint16 id, uint16 subId );
+
+/*
+ * Delete an NV item (extended format).
+ */
+extern uint8 osal_nv_delete_ex( uint16 id, uint16 subId, uint16 len );
+
+#endif // OSAL_NV_EXTENDED
 
 /*********************************************************************
 *********************************************************************/

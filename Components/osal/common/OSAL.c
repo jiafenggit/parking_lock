@@ -1,14 +1,14 @@
 /**************************************************************************************************
   Filename:       OSAL.c
-  Revised:        $Date: 2012-02-02 12:55:32 -0800 (Thu, 02 Feb 2012) $
-  Revision:       $Revision: 29143 $
+  Revised:        $Date: 2014-11-04 15:36:27 -0800 (Tue, 04 Nov 2014) $
+  Revision:       $Revision: 40989 $
 
   Description:    This API allows the software components in the Z-stack to be written
                   independently of the specifics of the operating system, kernel or tasking
                   environment (including control loops or connect-to-interrupt systems).
 
 
-  Copyright 2004-2012 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2004-2014 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -63,6 +63,10 @@
   #include "osal_task.h"
 #endif
 
+#ifdef USE_ICALL
+  #include <ICall.h>
+#endif /* USE_ICALL */
+
 /*********************************************************************
  * MACROS
  */
@@ -70,6 +74,10 @@
 /*********************************************************************
  * CONSTANTS
  */
+#ifdef USE_ICALL
+// A bit mask to use to indicate a proxy OSAL task ID.
+#define OSAL_PROXY_ID_FLAG       0x80
+#endif // USE_ICALL
 
 /*********************************************************************
  * TYPEDEFS
@@ -81,6 +89,11 @@
 
 // Message Pool Definitions
 osal_msg_q_t osal_qHead;
+
+#ifdef USE_ICALL
+// OSAL event loop hook function pointer 
+void (*osal_eventloop_hook)(void) = NULL;
+#endif /* USE_ICALL */
 
 /*********************************************************************
  * EXTERNAL VARIABLES
@@ -97,11 +110,58 @@ osal_msg_q_t osal_qHead;
 // Index of active task
 static uint8 activeTaskID = TASK_NO_TASK;
 
+#ifdef USE_ICALL
+// Maximum number of proxy tasks
+#ifndef OSAL_MAX_NUM_PROXY_TASKS
+#define OSAL_MAX_NUM_PROXY_TASKS 2
+#endif // OSAL_MAX_NUM_PROXY_TASKS
+
+// ICall entity ID value used to indicate invalid value
+#define OSAL_INVALID_DISPATCH_ID 0xffu
+
+// Semaphore associated with OSAL RTOS thread receive queue
+ICall_Semaphore osal_semaphore;
+
+// Entity ID that OSAL RTOS thread has registered with
+ICall_EntityID osal_entity;
+
+// Last read tick count value reflected into the OSAL timer
+uint_least32_t osal_last_timestamp;
+
+// RTOS tick period in microseconds
+uint_least32_t osal_tickperiod;
+
+// Maximum timeout value in milliseconds that can be used with an RTOS timer
+uint_least32_t osal_max_msecs;
+
+// Timer ID for RTOS timer as backend engine for OSAL timer
+static ICall_TimerID osal_timerid_msec_timer;
+
+// Timer callback sequence tracking counter to handle race condition
+static unsigned osal_msec_timer_seq = 0;
+
+// proxy task ID map
+static uint8 osal_proxy_tasks[OSAL_MAX_NUM_PROXY_TASKS];
+
+// service dispatcher entity IDs corresponding to OSAL tasks
+static uint8 *osal_dispatch_entities;
+
+static uint8 osal_notask_entity;
+
+#endif // USE_ICALL
+
 /*********************************************************************
  * LOCAL FUNCTION PROTOTYPES
  */
 
 static uint8 osal_msg_enqueue_push( uint8 destination_task, uint8 *msg_ptr, uint8 urgent );
+
+#ifdef USE_ICALL
+static uint8 osal_alien2proxy(ICall_EntityID entity);
+static ICall_EntityID osal_proxy2alien(uint8 proxyid);
+static uint8 osal_dispatch2id(ICall_EntityID entity);
+static void osal_msec_timer_cback(void *arg);
+#endif // USE_ICALL
 
 /*********************************************************************
  * HELPER FUNCTIONS
@@ -323,7 +383,9 @@ uint32 osal_build_uint32( uint8 *swapped, uint8 len )
  */
 unsigned char * _ltoa(unsigned long l, unsigned char *buf, unsigned char radix)
 {
-#if defined( __GNUC__ )
+#if defined (__TI_COMPILER_VERSION)
+  return ( (unsigned char*)ltoa( l, (char *)buf ) );
+#elif defined( __GNUC__ )
   return ( (char*)ltoa( l, buf, radix ) );
 #else
   unsigned char tmp1[10] = "", tmp2[10] = "", tmp3[10] = "";
@@ -401,6 +463,78 @@ uint16 osal_rand( void )
 /*********************************************************************
  * API FUNCTIONS
  *********************************************************************/
+
+#ifdef USE_ICALL
+/*********************************************************************
+ * @fn      osal_prepare_svc_enroll
+ *
+ * @brief   Initialize data structures that map OSAL task ids to
+ *          ICall entity ids.
+ *
+ * @param   none
+ *
+ * @return  none
+ */
+static void osal_prepare_svc_enroll(void)
+{
+  osal_dispatch_entities = (uint8 *) osal_mem_alloc(tasksCnt * 2);
+  osal_memset(osal_dispatch_entities, OSAL_INVALID_DISPATCH_ID, tasksCnt * 2);
+  osal_memset(osal_proxy_tasks, OSAL_INVALID_DISPATCH_ID,
+              OSAL_MAX_NUM_PROXY_TASKS);
+}
+
+/*********************************************************************
+ * @fn      osal_enroll_dispatchid
+ *
+ * @brief   Map a task id to an ICall entity id for messaging in
+ *          both directions (sending and receiving).
+ *
+ * @param   taskid       OSAL task id
+ * @param   dispatchid   ICall entity id
+ *
+ * @return  none
+ */
+void osal_enroll_dispatchid(uint8 taskid, ICall_EntityID dispatchid)
+{
+  osal_dispatch_entities[taskid] = dispatchid;
+  osal_dispatch_entities[tasksCnt + taskid] = dispatchid;
+}
+
+/*********************************************************************
+ * @fn      osal_enroll_senderid
+ *
+ * @brief   Map a task id to an ICall entity id, which shall be used
+ *          just for sending a message from an OSAL task.
+ *          Note that osal_enroll_dispatchid() must never be called
+ *          with the same OSAL task id used in this function call.
+ *          However, it is OK to call osal_enroll_dispatchid()
+ *          with the same ICall entity id and a different OSAL task id.
+ *
+ * @param   taskid       OSAL task id
+ * @param   dispatchid   ICall entity id
+ *
+ * @return  none
+ */
+void osal_enroll_senderid(uint8 taskid, ICall_EntityID dispatchid)
+{
+  osal_dispatch_entities[tasksCnt + taskid] = dispatchid;
+}
+
+/*********************************************************************
+ * @fn      osal_enroll_notasksender
+ *
+ * @brief   Map no task id to an ICall entity id, which shall be used
+ *          just for sending a message from non-OSAL task.
+ *
+ * @param   dispatchid   ICall entity id
+ *
+ * @return  none
+ */
+void osal_enroll_notasksender(ICall_EntityID dispatchid)
+{
+  osal_notask_entity = dispatchid;
+}
+#endif /* USE_ICALL */
 
 /*********************************************************************
  * @fn      osal_msg_allocate
@@ -494,6 +628,41 @@ uint8 osal_msg_deallocate( uint8 *msg_ptr )
  */
 uint8 osal_msg_send( uint8 destination_task, uint8 *msg_ptr )
 {
+#ifdef USE_ICALL
+  if (destination_task & OSAL_PROXY_ID_FLAG)
+  {
+    /* Destination is a proxy task */
+    osal_msg_hdr_t *hdr = (osal_msg_hdr_t *)msg_ptr - 1;
+    ICall_EntityID src, dst;
+
+    uint8 taskid = osal_self();
+    if (taskid == TASK_NO_TASK)
+    {
+      /* Call must have been made from either an ISR or a user-thread */
+      src = osal_notask_entity;
+    }
+    else
+    {
+      src = (ICall_EntityID) osal_dispatch_entities[taskid + tasksCnt];
+    }
+    if (src == OSAL_INVALID_DISPATCH_ID)
+    {
+      /* The source entity is not registered */
+      /* abort */
+      ICall_abort();
+      return FAILURE;
+    }
+    dst = osal_proxy2alien(destination_task);
+    hdr->dest_id = TASK_NO_TASK;
+    if (ICall_send(src, dst, ICALL_MSG_FORMAT_KEEP, msg_ptr) ==
+        ICALL_ERRNO_SUCCESS)
+    {
+      return SUCCESS;
+    }
+    osal_msg_deallocate(msg_ptr);
+    return FAILURE;
+  }
+#endif /* USE_ICALL */
   return ( osal_msg_enqueue_push( destination_task, msg_ptr, FALSE ) );
 }
 
@@ -542,6 +711,13 @@ static uint8 osal_msg_enqueue_push( uint8 destination_task, uint8 *msg_ptr, uint
   {
     return ( INVALID_MSG_POINTER );
   }
+
+#ifdef USE_ICALL
+  if (destination_task & OSAL_PROXY_ID_FLAG)
+  {
+    ICall_abort();
+  }
+#endif /* USE_ICALL */
 
   if ( destination_task >= tasksCnt )
   {
@@ -691,6 +867,52 @@ osal_event_hdr_t *osal_msg_find(uint8 task_id, uint8 event)
   HAL_EXIT_CRITICAL_SECTION(intState);  // Release interrupts.
 
   return (osal_event_hdr_t *)pHdr;
+}
+
+/**************************************************************************************************
+ * @fn          osal_msg_count
+ *
+ * @brief       This function counts the number of messages, in the OSAL message queue with a
+ *              a given task ID and message event type.
+ *
+ * input parameters
+ *
+ * @param       task_id - The OSAL task id that the enqueued OSAL message must match.
+ * @param       event - The OSAL event id that the enqueued OSAL message must match. 0xFF for 
+ *              all events.
+ *
+ * output parameters
+ *
+ * None.
+ *
+ * @return      The number of OSAL messages that match the task ID and Event.
+ **************************************************************************************************
+ */
+uint8 osal_msg_count( uint8 task_id, uint8 event )
+{
+  uint8 count = 0;
+  osal_msg_hdr_t *pHdr;
+  halIntState_t intState;
+
+  HAL_ENTER_CRITICAL_SECTION(intState);  // Hold off interrupts.
+
+  pHdr = osal_qHead;  // Point to the top of the queue.
+
+  // Look through the queue for a message that matches the task_id and event parameters.
+  while (pHdr != NULL)
+  {
+    if ( ((pHdr-1)->dest_id == task_id) 
+        && ((event == 0xFF) || (((osal_event_hdr_t *)pHdr)->event == event)) )
+    {
+      count++;
+    }
+
+    pHdr = OSAL_MSG_NEXT(pHdr);
+  }
+
+  HAL_EXIT_CRITICAL_SECTION(intState);  // Release interrupts.
+
+  return ( count );
 }
 
 /*********************************************************************
@@ -897,16 +1119,77 @@ uint8 osal_msg_enqueue_max( osal_msg_q_t *q_ptr, void *msg_ptr, uint8 max )
  * @param   uint8 task_id - receiving tasks ID
  * @param   uint8 event_flag - what event to set
  *
- * @return  SUCCESS, INVALID_TASK
+ * @return  SUCCESS, MSG_BUFFER_NOT_AVAIL, FAILURE, INVALID_TASK
  */
+#ifdef OSAL_PORT2TIRTOS
+uint8 osal_set_event_raw( uint8 task_id, uint16 event_flag )
+#else /* OSAL_PORT2TIRTOS */
 uint8 osal_set_event( uint8 task_id, uint16 event_flag )
+#endif /* OSAL_PORT2TIRTOS */
 {
+#ifdef USE_ICALL
+  if (task_id & OSAL_PROXY_ID_FLAG)
+  {
+    /* Destination is a proxy task */
+    osal_msg_hdr_t *hdr;
+    ICall_EntityID src, dst;
+    uint8 taskid;
+
+    struct _osal_event_msg_t
+    {
+      uint16 signature;
+      uint16 event_flag;
+    } *msg_ptr = (struct _osal_event_msg_t *)
+      osal_msg_allocate(sizeof(*msg_ptr));
+
+    if (!msg_ptr)
+    {
+      return MSG_BUFFER_NOT_AVAIL;
+    }
+    msg_ptr->signature = 0xffffu;
+    msg_ptr->event_flag = event_flag;
+    hdr = (osal_msg_hdr_t *)msg_ptr - 1;
+
+    taskid = osal_self();
+    if (taskid == TASK_NO_TASK)
+    {
+      /* Call must have been made from either an ISR or a user-thread */
+      src = osal_notask_entity;
+    }
+    else
+    {
+      src = (ICall_EntityID) osal_dispatch_entities[taskid + tasksCnt];
+    }
+
+    if (src == OSAL_INVALID_DISPATCH_ID)
+    {
+      /* The source entity is not registered */
+      osal_msg_deallocate((uint8 *) msg_ptr);
+      ICall_abort();
+      return FAILURE;
+    }
+    dst = osal_proxy2alien(task_id);
+    hdr->dest_id = TASK_NO_TASK;
+    if (ICall_send(src, dst,
+                   ICALL_MSG_FORMAT_KEEP, msg_ptr) ==
+        ICALL_ERRNO_SUCCESS)
+    {
+      return SUCCESS;
+    }
+    osal_msg_deallocate((uint8 *) msg_ptr);
+    return FAILURE;
+  }
+#endif /* USE_ICALL */
+
   if ( task_id < tasksCnt )
   {
     halIntState_t   intState;
     HAL_ENTER_CRITICAL_SECTION(intState);    // Hold off interrupts
     tasksEvents[task_id] |= event_flag;  // Stuff the event bit(s)
     HAL_EXIT_CRITICAL_SECTION(intState);     // Release interrupts
+#ifdef USE_ICALL
+    ICall_signal(osal_semaphore);
+#endif /* USE_ICALL */
     return ( SUCCESS );
   }
    else
@@ -1040,8 +1323,10 @@ uint8 osal_int_disable( uint8 interrupt_id )
  */
 uint8 osal_init_system( void )
 {
+#if !defined USE_ICALL && !defined OSAL_PORT2TIRTOS
   // Initialize the Memory Allocation System
   osal_mem_init();
+#endif /* !defined USE_ICALL && !defined OSAL_PORT2TIRTOS */
 
   // Initialize the message queue
   osal_qHead = NULL;
@@ -1052,11 +1337,27 @@ uint8 osal_init_system( void )
   // Initialize the Power Management System
   osal_pwrmgr_init();
 
+#ifdef USE_ICALL
+  /* Prepare memory space for service enrollment */
+  osal_prepare_svc_enroll();
+#endif /* USE_ICALL */
+
   // Initialize the system tasks.
   osalInitTasks();
 
+#if !defined USE_ICALL && !defined OSAL_PORT2TIRTOS
   // Setup efficient search for the first free block of heap.
   osal_mem_kick();
+#endif /* !defined USE_ICALL && !defined OSAL_PORT2TIRTOS */
+
+#ifdef USE_ICALL
+  // Initialize variables used to track timing and provide OSAL timer service
+  osal_last_timestamp = (uint_least32_t) ICall_getTicks();
+  osal_tickperiod = (uint_least32_t) ICall_getTickPeriod();
+  osal_max_msecs = (uint_least32_t) ICall_getMaxMSecs();
+  /* Reduce ceiling considering potential latency */
+  osal_max_msecs -= 2;
+#endif /* USE_ICALL */
 
   return ( SUCCESS );
 }
@@ -1075,13 +1376,167 @@ uint8 osal_init_system( void )
  */
 void osal_start_system( void )
 {
+#ifdef USE_ICALL
+  /* Kick off timer service in order to allocate resources upfront.
+   * The first timeout is required to schedule next OSAL timer event
+   * as well. */
+  ICall_Errno errno = ICall_setTimer(1, osal_msec_timer_cback,
+                                     (void *) osal_msec_timer_seq,
+                                     &osal_timerid_msec_timer);
+  if (errno != ICALL_ERRNO_SUCCESS)
+  {
+    ICall_abort();
+  }
+#endif /* USE_ICALL */
+
 #if !defined ( ZBIT ) && !defined ( UBIT )
   for(;;)  // Forever Loop
 #endif
   {
     osal_run_system();
+
+#ifdef USE_ICALL
+    ICall_wait(ICALL_TIMEOUT_FOREVER);
+#endif /* USE_ICALL */
   }
 }
+
+#ifdef USE_ICALL
+/*********************************************************************
+ * @fn      osal_alien2proxy
+ *
+ * @brief
+ *
+ *   Assign or retrieve a proxy OSAL task id for an external ICall entity.
+ *
+ * @param   origid  ICall entity id
+ *
+ * @return  proxy OSAL task id
+ */
+static uint8 osal_alien2proxy(ICall_EntityID origid)
+{
+  size_t i;
+
+  for (i = 0; i < OSAL_MAX_NUM_PROXY_TASKS; i++)
+  {
+    if (osal_proxy_tasks[i] == OSAL_INVALID_DISPATCH_ID)
+    {
+      /* proxy not found. Create a new one */
+      osal_proxy_tasks[i] = (uint8) origid;
+      return (OSAL_PROXY_ID_FLAG | i);
+    }
+    else if ((ICall_EntityID) osal_proxy_tasks[i] == origid)
+    {
+      return (OSAL_PROXY_ID_FLAG | i);
+    }
+  }
+  /* abort */
+  ICall_abort();
+  return TASK_NO_TASK;
+}
+
+/*********************************************************************
+ * @fn      osal_proxy2alien
+ *
+ * @brief
+ *
+ *   Retrieve the ICall entity id for a proxy OSAL task id
+ *
+ * @param   proxyid  Proxy OSAL task id
+ *
+ * @return  ICall entity id
+ */
+static ICall_EntityID osal_proxy2alien(uint8 proxyid)
+{
+  proxyid ^= OSAL_PROXY_ID_FLAG;
+  if (proxyid >= OSAL_MAX_NUM_PROXY_TASKS)
+  {
+    /* abort */
+    ICall_abort();
+  }
+  return (ICall_EntityID) osal_proxy_tasks[proxyid];
+}
+
+/*********************************************************************
+ * @fn      osal_dispatch2id
+ *
+ * @brief
+ *
+ *   Retrieve OSAL task id mapped to a designated ICall entity id
+ *
+ * @param   entity  ICall entity id
+ *
+ * @return  OSAL task id
+ */
+static uint8 osal_dispatch2id(ICall_EntityID entity)
+{
+  size_t i;
+
+  for (i = 0; i < tasksCnt; i++)
+  {
+    if ((ICall_EntityID) osal_dispatch_entities[i] == entity)
+    {
+      return i;
+    }
+  }
+  return TASK_NO_TASK;
+}
+
+/*********************************************************************
+ * @fn      osal_msec_timer_cback
+ *
+ * @brief
+ *
+ *   This function is a callback function for ICall_setTimer() service
+ *   used to implement OSAL timer
+ *
+ * @param   arg  In this case, the timer sequence number is passed.
+ *
+ * @return  None
+ */
+static void osal_msec_timer_cback(void *arg)
+{
+  unsigned seq = (unsigned) arg;
+  halIntState_t intState;
+
+  HAL_ENTER_CRITICAL_SECTION(intState);
+  if (seq == osal_msec_timer_seq)
+  {
+    ICall_signal(osal_semaphore);
+  }
+  HAL_EXIT_CRITICAL_SECTION(intState);
+}
+
+/*********************************************************************
+ * @fn      osal_service_entry
+ *
+ * @brief
+ *
+ *   This function is service function for messaging service
+ *
+ * @param   args  arguments.
+ *
+ * @return  ICall error code
+ */
+ICall_Errno osal_service_entry(ICall_FuncArgsHdr *args)
+{
+  if (args->func == ICALL_MSG_FUNC_GET_LOCAL_MSG_ENTITY_ID)
+  {
+    /* Get proxy ID */
+    ((ICall_GetLocalMsgEntityIdArgs *)args)->localId =
+      osal_alien2proxy(((ICall_GetLocalMsgEntityIdArgs *)args)->entity);
+    if (((ICall_GetLocalMsgEntityIdArgs *)args)->localId == TASK_NO_TASK)
+    {
+      return ICALL_ERRNO_NO_RESOURCE;
+    }
+  }
+  else
+  {
+    return ICALL_ERRNO_INVALID_FUNCTION;
+  }
+  return ICALL_ERRNO_SUCCESS;
+}
+#endif /* USE_ICALL */
 
 /*********************************************************************
  * @fn      osal_run_system
@@ -1101,11 +1556,90 @@ void osal_run_system( void )
 {
   uint8 idx = 0;
 
+#ifdef USE_ICALL
+  uint32 next_timeout_prior = osal_next_timeout();
+#else /* USE_ICALL */
 #ifndef HAL_BOARD_CC2538
   osalTimeUpdate();
 #endif
-  
+
   Hal_ProcessPoll();
+#endif /* USE_ICALL */
+
+#ifdef USE_ICALL
+  {
+    /* Update osal timers to the latest before running any OSAL processes
+     * regardless of wakeup callback from ICall because OSAL timers are added
+     * relative to the current time. */
+    unsigned long newtimestamp = ICall_getTicks();
+    uint32 milliseconds;
+
+    if (osal_tickperiod == 1000)
+    {
+      milliseconds = newtimestamp - osal_last_timestamp;
+      osal_last_timestamp = newtimestamp;
+    }
+    else
+    {
+      unsigned long long delta = (unsigned long long)
+        ((newtimestamp - osal_last_timestamp) & 0xfffffffful);
+      delta *= osal_tickperiod;
+      delta /= 1000;
+      milliseconds = (uint32) delta;
+      osal_last_timestamp += (uint32) (delta * 1000 / osal_tickperiod);
+    }
+    osalAdjustTimer(milliseconds);
+    /* Set a value that will never match osal_next_timeout()
+     * return value so that the next time can be scheduled.
+     */
+    next_timeout_prior = 0xfffffffful;
+  }
+  if (osal_eventloop_hook)
+  {
+    osal_eventloop_hook();
+  }
+
+  for (;;)
+  {
+    void *msg;
+    ICall_EntityID src, dst;
+    osal_msg_hdr_t *hdr;
+    uint8 dest_id;
+
+    if (ICall_fetchMsg(&src, &dst, &msg) != ICALL_ERRNO_SUCCESS)
+    {
+      break;
+    }
+    hdr = (osal_msg_hdr_t *) msg - 1;
+    dest_id = osal_dispatch2id(dst);
+    if (dest_id == TASK_NO_TASK)
+    {
+      /* Something wrong */
+      ICall_abort();
+    }
+    else
+    {
+      /* Message towards one of the tasks */
+      /* Create a proxy task ID if necessary and
+       * queue the message to the OSAL internal queue.
+       */
+      uint8 proxyid = osal_alien2proxy(hdr->srcentity);
+
+      if (hdr->format == ICALL_MSG_FORMAT_1ST_CHAR_TASK_ID)
+      {
+        uint8 *bytes = msg;
+        *bytes = proxyid;
+      }
+      else if (hdr->format == ICALL_MSG_FORMAT_3RD_CHAR_TASK_ID)
+      {
+        uint8 *bytes = msg;
+        bytes[2] = proxyid;
+      }
+      /* now queue the message to the OSAL queue */
+      osal_msg_send(dest_id, msg);
+    }
+  }
+#endif /* USE_ICALL */
 
   do {
     if (tasksEvents[idx])  // Task is highest priority that is ready.
@@ -1132,7 +1666,7 @@ void osal_run_system( void )
     tasksEvents[idx] |= events;  // Add back unprocessed events to the current task.
     HAL_EXIT_CRITICAL_SECTION(intState);
   }
-#if defined( POWER_SAVING )
+#if defined( POWER_SAVING ) && !defined(USE_ICALL)
   else  // Complete pass through all task events with no activity?
   {
     osal_pwrmgr_powerconserve();  // Put the processor/system into sleep
@@ -1145,6 +1679,48 @@ void osal_run_system( void )
     osal_task_yield();
   }
 #endif
+
+#if defined USE_ICALL
+  /* Note that scheduling wakeup at this point instead of
+   * scheduling it upon ever OSAL start timer request,
+   * would only work if OSAL start timer call is made
+   * from OSAL tasks, but not from either ISR or
+   * non-OSAL application thread.
+   * In case, OSAL start timer is called from non-OSAL
+   * task, the scheduling should be part of OSAL_Timers
+   * module.
+   * Such a change to OSAL_Timers module was not made
+   * in order not to diverge the OSAL implementations
+   * too drastically between pure OSAL solution vs.
+   * OSAL upon service dispatcher (RTOS).
+   * TODO: reconsider the above statement.
+   */
+  {
+    halIntState_t intState;
+
+    uint32 next_timeout_post = osal_next_timeout();
+    if (next_timeout_post != next_timeout_prior)
+    {
+      /* Next wakeup time has to be scheduled */
+      if (next_timeout_post == 0)
+      {
+        /* No timer. Set time to the max */
+        next_timeout_post = OSAL_TIMERS_MAX_TIMEOUT;
+      }
+      if (next_timeout_post > osal_max_msecs)
+      {
+        next_timeout_post = osal_max_msecs;
+      }
+      /* Restart timer */
+      HAL_ENTER_CRITICAL_SECTION(intState);
+      ICall_stopTimer(osal_timerid_msec_timer);
+      ICall_setTimerMSecs(next_timeout_post, osal_msec_timer_cback,
+                          (void *) (++osal_msec_timer_seq),
+                          &osal_timerid_msec_timer);
+      HAL_EXIT_CRITICAL_SECTION(intState);
+    }
+  }
+#endif /* USE_ICALL */
 }
 
 /*********************************************************************

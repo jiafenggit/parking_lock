@@ -1,12 +1,12 @@
 /**************************************************************************************************
   Filename:       devinfoservice.c
-  Revised:        $Date $
-  Revision:       $Revision $
+  Revised:        $Date: 2015-03-24 09:19:15 -0700 (Tue, 24 Mar 2015) $
+  Revision:       $Revision: 43274 $
 
   Description:    This file contains the Device Information service.
 
 
-  Copyright 2012 - 2013 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2012 - 2015 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -42,7 +42,6 @@
  */
 #include "bcomdef.h"
 #include "OSAL.h"
-#include "linkdb.h"
 #include "att.h"
 #include "gatt.h"
 #include "gatt_uuid.h"
@@ -134,6 +133,8 @@ CONST uint8 devInfoPnpIdUUID[ATT_BT_UUID_SIZE] =
 /*********************************************************************
  * EXTERNAL FUNCTIONS
  */
+
+extern void* memcpy(void *dest, const void *src, size_t len);
 
 /*********************************************************************
  * LOCAL VARIABLES
@@ -357,8 +358,9 @@ static gattAttribute_t devInfoAttrTbl[] =
 /*********************************************************************
  * LOCAL FUNCTIONS
  */
-static uint8 devInfo_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr,
-                            uint8 *pValue, uint8 *pLen, uint16 offset, uint8 maxLen );
+static bStatus_t devInfo_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr,
+                                     uint8 *pValue, uint8 *pLen, uint16 offset,
+                                     uint8 maxLen, uint8 method );
 
 /*********************************************************************
  * PROFILE CALLBACKS
@@ -392,6 +394,7 @@ bStatus_t DevInfo_AddService( void )
   // Register GATT attribute list and CBs with GATT Server App
   return GATTServApp_RegisterService( devInfoAttrTbl,
                                       GATT_NUM_ATTRS( devInfoAttrTbl ),
+                                      GATT_MAX_ENCRYPT_KEY_SIZE,
                                       &devInfoCBs );
 }
 
@@ -416,7 +419,7 @@ bStatus_t DevInfo_SetParameter( uint8 param, uint8 len, void *value )
   switch ( param )
   {
      case DEVINFO_SYSTEM_ID:
-      osal_memcpy(devInfoSystemId, value, len);
+      memcpy(devInfoSystemId, value, len);
       break;
 
     default:
@@ -447,38 +450,38 @@ bStatus_t DevInfo_GetParameter( uint8 param, void *value )
   switch ( param )
   {
     case DEVINFO_SYSTEM_ID:
-      osal_memcpy(value, devInfoSystemId, sizeof(devInfoSystemId));
+      memcpy(value, devInfoSystemId, sizeof(devInfoSystemId));
       break;
 
     case DEVINFO_MODEL_NUMBER:
-      osal_memcpy(value, devInfoModelNumber, sizeof(devInfoModelNumber));
+      memcpy(value, devInfoModelNumber, sizeof(devInfoModelNumber));
       break;
     case DEVINFO_SERIAL_NUMBER:
-      osal_memcpy(value, devInfoSerialNumber, sizeof(devInfoSerialNumber));
+      memcpy(value, devInfoSerialNumber, sizeof(devInfoSerialNumber));
       break;
 
     case DEVINFO_FIRMWARE_REV:
-      osal_memcpy(value, devInfoFirmwareRev, sizeof(devInfoFirmwareRev));
+      memcpy(value, devInfoFirmwareRev, sizeof(devInfoFirmwareRev));
       break;
 
     case DEVINFO_HARDWARE_REV:
-      osal_memcpy(value, devInfoHardwareRev, sizeof(devInfoHardwareRev));
+      memcpy(value, devInfoHardwareRev, sizeof(devInfoHardwareRev));
       break;
 
     case DEVINFO_SOFTWARE_REV:
-      osal_memcpy(value, devInfoSoftwareRev, sizeof(devInfoSoftwareRev));
+      memcpy(value, devInfoSoftwareRev, sizeof(devInfoSoftwareRev));
       break;
 
     case DEVINFO_MANUFACTURER_NAME:
-      osal_memcpy(value, devInfoMfrName, sizeof(devInfoMfrName));
+      memcpy(value, devInfoMfrName, sizeof(devInfoMfrName));
       break;
 
     case DEVINFO_11073_CERT_DATA:
-      osal_memcpy(value, devInfo11073Cert, sizeof(devInfo11073Cert));
+      memcpy(value, devInfo11073Cert, sizeof(devInfo11073Cert));
       break;
 
     case DEVINFO_PNP_ID:
-      osal_memcpy(value, devInfoPnpId, sizeof(devInfoPnpId));
+      memcpy(value, devInfoPnpId, sizeof(devInfoPnpId));
       break;
 
     default:
@@ -500,20 +503,25 @@ bStatus_t DevInfo_GetParameter( uint8 param, void *value )
  * @param       pLen - length of data to be read
  * @param       offset - offset of the first octet to be read
  * @param       maxLen - maximum length of data to be read
+ * @param       method - type of read message
  *
- * @return      Success or Failure
+ * @return      SUCCESS, blePending or Failure
  */
-static uint8 devInfo_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr,
-                            uint8 *pValue, uint8 *pLen, uint16 offset, uint8 maxLen )
+static bStatus_t devInfo_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr,
+                                     uint8 *pValue, uint8 *pLen, uint16 offset,
+                                     uint8 maxLen, uint8 method )
 {
   bStatus_t status = SUCCESS;
   uint16 uuid = BUILD_UINT16( pAttr->type.uuid[0], pAttr->type.uuid[1]);
 
+  // If the value offset of the Read Blob Request is greater than the
+  // length of the attribute value, an Error Response shall be sent with
+  // the error code Invalid Offset.
   switch (uuid)
   {
     case SYSTEM_ID_UUID:
       // verify offset
-      if (offset >= sizeof(devInfoSystemId))
+      if (offset > sizeof(devInfoSystemId))
       {
         status = ATT_ERR_INVALID_OFFSET;
       }
@@ -523,13 +531,13 @@ static uint8 devInfo_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr,
         *pLen = MIN(maxLen, (sizeof(devInfoSystemId) - offset));
 
         // copy data
-        osal_memcpy(pValue, &devInfoSystemId[offset], *pLen);
+        memcpy(pValue, &devInfoSystemId[offset], *pLen);
       }
       break;
 
     case MODEL_NUMBER_UUID:
       // verify offset
-      if (offset >= (sizeof(devInfoModelNumber) - 1))
+      if (offset > (sizeof(devInfoModelNumber) - 1))
       {
         status = ATT_ERR_INVALID_OFFSET;
       }
@@ -539,13 +547,13 @@ static uint8 devInfo_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr,
         *pLen = MIN(maxLen, ((sizeof(devInfoModelNumber) - 1) - offset));
 
         // copy data
-        osal_memcpy(pValue, &devInfoModelNumber[offset], *pLen);
+        memcpy(pValue, &devInfoModelNumber[offset], *pLen);
       }
       break;
 
     case SERIAL_NUMBER_UUID:
       // verify offset
-      if (offset >= (sizeof(devInfoSerialNumber) - 1))
+      if (offset > (sizeof(devInfoSerialNumber) - 1))
       {
         status = ATT_ERR_INVALID_OFFSET;
       }
@@ -555,13 +563,13 @@ static uint8 devInfo_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr,
         *pLen = MIN(maxLen, ((sizeof(devInfoSerialNumber) - 1) - offset));
 
         // copy data
-        osal_memcpy(pValue, &devInfoSerialNumber[offset], *pLen);
+        memcpy(pValue, &devInfoSerialNumber[offset], *pLen);
       }
       break;
 
     case FIRMWARE_REV_UUID:
       // verify offset
-      if (offset >= (sizeof(devInfoFirmwareRev) - 1))
+      if (offset > (sizeof(devInfoFirmwareRev) - 1))
       {
         status = ATT_ERR_INVALID_OFFSET;
       }
@@ -571,13 +579,13 @@ static uint8 devInfo_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr,
         *pLen = MIN(maxLen, ((sizeof(devInfoFirmwareRev) - 1) - offset));
         
         // copy data
-        osal_memcpy(pValue, &devInfoFirmwareRev[offset], *pLen);
+        memcpy(pValue, &devInfoFirmwareRev[offset], *pLen);
       }
       break;
 
     case HARDWARE_REV_UUID:
       // verify offset
-      if (offset >= (sizeof(devInfoHardwareRev) - 1))
+      if (offset > (sizeof(devInfoHardwareRev) - 1))
       {
         status = ATT_ERR_INVALID_OFFSET;
       }
@@ -587,13 +595,13 @@ static uint8 devInfo_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr,
         *pLen = MIN(maxLen, ((sizeof(devInfoHardwareRev) - 1) - offset));
 
         // copy data
-        osal_memcpy(pValue, &devInfoHardwareRev[offset], *pLen);
+        memcpy(pValue, &devInfoHardwareRev[offset], *pLen);
       }
       break;
 
     case SOFTWARE_REV_UUID:
       // verify offset
-      if (offset >= (sizeof(devInfoSoftwareRev) - 1))
+      if (offset > (sizeof(devInfoSoftwareRev) - 1))
       {
         status = ATT_ERR_INVALID_OFFSET;
       }
@@ -603,13 +611,13 @@ static uint8 devInfo_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr,
         *pLen = MIN(maxLen, ((sizeof(devInfoSoftwareRev) - 1) - offset));
         
         // copy data
-        osal_memcpy(pValue, &devInfoSoftwareRev[offset], *pLen);
+        memcpy(pValue, &devInfoSoftwareRev[offset], *pLen);
       }
       break;
 
     case MANUFACTURER_NAME_UUID:
       // verify offset
-      if (offset >= (sizeof(devInfoMfrName) - 1))
+      if (offset > (sizeof(devInfoMfrName) - 1))
       {
         status = ATT_ERR_INVALID_OFFSET;
       }
@@ -619,13 +627,13 @@ static uint8 devInfo_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr,
         *pLen = MIN(maxLen, ((sizeof(devInfoMfrName) - 1) - offset));
         
         // copy data
-        osal_memcpy(pValue, &devInfoMfrName[offset], *pLen);
+        memcpy(pValue, &devInfoMfrName[offset], *pLen);
       }
       break;
 
     case IEEE_11073_CERT_DATA_UUID:
       // verify offset
-      if (offset >= sizeof(devInfo11073Cert))
+      if (offset > sizeof(devInfo11073Cert))
       {
         status = ATT_ERR_INVALID_OFFSET;
       }
@@ -635,13 +643,13 @@ static uint8 devInfo_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr,
         *pLen = MIN(maxLen, (sizeof(devInfo11073Cert) - offset));
 
         // copy data
-        osal_memcpy(pValue, &devInfo11073Cert[offset], *pLen);
+        memcpy(pValue, &devInfo11073Cert[offset], *pLen);
       }
       break;
 
     case PNP_ID_UUID:
       // verify offset
-      if (offset >= sizeof(devInfoPnpId))
+      if (offset > sizeof(devInfoPnpId))
       {
         status = ATT_ERR_INVALID_OFFSET;
       }
@@ -651,7 +659,7 @@ static uint8 devInfo_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr,
         *pLen = MIN(maxLen, (sizeof(devInfoPnpId) - offset));
 
         // copy data
-        osal_memcpy(pValue, &devInfoPnpId[offset], *pLen);
+        memcpy(pValue, &devInfoPnpId[offset], *pLen);
       }
       break;
 

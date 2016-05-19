@@ -1,7 +1,7 @@
 /*******************************************************************************
   Filename:       hci.h
-  Revised:        $Date: 2013-09-05 11:19:58 -0700 (Thu, 05 Sep 2013) $
-  Revision:       $Revision: 35219 $
+  Revised:        $Date: 2015-04-14 15:23:57 -0700 (Tue, 14 Apr 2015) $
+  Revision:       $Revision: 43415 $
 
   Description:    This file contains the Host Controller Interface (HCI) API.
                   It provides the defines, types, and functions for all
@@ -10,7 +10,7 @@
                   All Bluetooth and BLE commands are based on:
                   Bluetooth Core Specification, V4.0.0, Vol. 2, Part E.
 
-  Copyright 2009-2013 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2009-2015 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -129,17 +129,21 @@ extern "C"
 #define HCI_ERROR_CODE_HOST_BUSY_PAIRING                                    0x38
 #define HCI_ERROR_CODE_CONN_REJ_NO_SUITABLE_CHAN_FOUND                      0x39
 #define HCI_ERROR_CODE_CONTROLLER_BUSY                                      0x3A
-#define HCI_ERROR_CODE_UNACCEPTABLE_CONN_INTERVAL                           0x3B
+#define HCI_ERROR_CODE_UNACCEPTABLE_CONN_PARAMETERS                         0x3B
 #define HCI_ERROR_CODE_DIRECTED_ADV_TIMEOUT                                 0x3C
 #define HCI_ERROR_CODE_CONN_TERM_MIC_FAILURE                                0x3D
 #define HCI_ERROR_CODE_CONN_FAILED_TO_ESTABLISH                             0x3E
 #define HCI_ERROR_CODE_MAC_CONN_FAILED                                      0x3F
+#define HCI_ERROR_CODE_COARSE_CLOCK_ADJUST_REJECTED                         0x40
 
 /*
 ** Max Buffers Supported
 */
-#define HCI_MAX_NUM_DATA_BUFFERS                       LL_MAX_NUM_DATA_BUFFERS
+
 #define HCI_MAX_NUM_CMD_BUFFERS                        LL_MAX_NUM_CMD_BUFFERS
+#if defined(CC2540) || defined(CC2541) || defined(CC2541S)
+#define HCI_MAX_NUM_DATA_BUFFERS                       LL_MAX_NUM_DATA_BUFFERS
+#endif // CC2540 | CC2541 | CC2541S
 
 /*
 ** HCI Command API Parameters
@@ -240,10 +244,26 @@ extern "C"
 #define HCI_EXT_RX_GAIN_STD                            LL_EXT_RX_GAIN_STD
 #define HCI_EXT_RX_GAIN_HIGH                           LL_EXT_RX_GAIN_HIGH
 //
+#if defined( CC26XX )
+#define HCI_EXT_TX_POWER_MINUS_21_DBM                  LL_EXT_TX_POWER_MINUS_21_DBM
+#define HCI_EXT_TX_POWER_MINUS_18_DBM                  LL_EXT_TX_POWER_MINUS_18_DBM
+#define HCI_EXT_TX_POWER_MINUS_15_DBM                  LL_EXT_TX_POWER_MINUS_15_DBM
+#define HCI_EXT_TX_POWER_MINUS_12_DBM                  LL_EXT_TX_POWER_MINUS_12_DBM
+#define HCI_EXT_TX_POWER_MINUS_9_DBM                   LL_EXT_TX_POWER_MINUS_9_DBM
+#define HCI_EXT_TX_POWER_MINUS_6_DBM                   LL_EXT_TX_POWER_MINUS_6_DBM
+#define HCI_EXT_TX_POWER_MINUS_3_DBM                   LL_EXT_TX_POWER_MINUS_3_DBM
+#define HCI_EXT_TX_POWER_0_DBM                         LL_EXT_TX_POWER_0_DBM
+#define HCI_EXT_TX_POWER_1_DBM                         LL_EXT_TX_POWER_1_DBM
+#define HCI_EXT_TX_POWER_2_DBM                         LL_EXT_TX_POWER_2_DBM
+#define HCI_EXT_TX_POWER_3_DBM                         LL_EXT_TX_POWER_3_DBM
+#define HCI_EXT_TX_POWER_4_DBM                         LL_EXT_TX_POWER_4_DBM
+#define HCI_EXT_TX_POWER_5_DBM                         LL_EXT_TX_POWER_5_DBM
+#else // CC254x
 #define HCI_EXT_TX_POWER_MINUS_23_DBM                  LL_EXT_TX_POWER_MINUS_23_DBM
 #define HCI_EXT_TX_POWER_MINUS_6_DBM                   LL_EXT_TX_POWER_MINUS_6_DBM
 #define HCI_EXT_TX_POWER_0_DBM                         LL_EXT_TX_POWER_0_DBM
 #define HCI_EXT_TX_POWER_4_DBM                         LL_EXT_TX_POWER_4_DBM
+#endif // CC26XX
 //
 #define HCI_EXT_ENABLE_ONE_PKT_PER_EVT                 LL_EXT_ENABLE_ONE_PKT_PER_EVT
 #define HCI_EXT_DISABLE_ONE_PKT_PER_EVT                LL_EXT_DISABLE_ONE_PKT_PER_EVT
@@ -408,8 +428,17 @@ typedef struct
   osal_event_hdr_t  hdr;
   uint8  numHciCmdPkt;                    // number of HCI Command Packet
   uint16 cmdOpcode;
-  uint8  *pReturnParam;                    // pointer to the return parameter
+  uint8  *pReturnParam;                   // pointer to the return parameter
 } hciEvt_CmdComplete_t;
+
+// Vendor Specific Command Complete Event
+typedef struct
+{
+  osal_event_hdr_t  hdr;
+  uint8   length;                         // length of parametric data, in bytes
+  uint16  cmdOpcode;
+  uint8  *pEventParam;
+} hciEvt_VSCmdComplete_t;
 
 // Command Status Event
 typedef struct
@@ -442,6 +471,26 @@ typedef struct
   osal_event_hdr_t  hdr;
   uint8 linkType;                         // synchronous or asynchronous buffer overflow
 } hciEvt_BufferOverflow_t;
+
+// Authenticated Payload Timeout Expired Event
+typedef struct
+{
+  osal_event_hdr_t  hdr;
+  uint16 connHandle;
+} hciEvt_AptoExpired_t;
+
+// LE Remote Connection Parameter Request Event
+typedef struct
+{
+  osal_event_hdr_t  hdr;
+  uint8  BLEEventCode;
+  uint8  status;
+  uint16 connHandle;
+  uint16 Interval_Min;
+  uint16 Interval_Max;
+  uint16 Latency;
+  uint16 Timeout;
+} hciEvt_BLERemoteConnParamReq_t;
 
 // Data structure for HCI Command Complete Event Return Parameter
 typedef struct
@@ -477,6 +526,18 @@ typedef struct
   uint16 len;                             // length of data packet
   uint8  *pData;                          // data packet given by len
 } hciDataEvent_t;
+
+#if defined( CC26XX )
+PACKED_TYPEDEF_STRUCT
+#else // CC254x
+typedef struct
+#endif // CC26XX
+{
+  uint8 connId;                           // device connection handle
+  uint8 role;                             // device connection role
+  uint8 addr[LL_DEVICE_ADDR_LEN];         // peer device address
+  uint8 addrType;                         // peer device address type
+} hciConnInfo_t;
 
 /*******************************************************************************
  * LOCAL VARIABLES
@@ -516,10 +577,8 @@ extern void *HCI_bm_alloc( uint16 size );
  *
  * @brief       This API is used to check that the connection time parameter
  *              ranges are valid, and that the connection time parameter
- *              combination is valid.
- *
- *              Note: Only connIntervalMax is used as part of the time parameter
- *                    combination check.
+ *              combination is valid. It also checks if the min/max CI range
+ *              is valid.
  *
  * input parameters
  *
@@ -633,7 +692,6 @@ extern void HCI_SMPTaskRegister( uint8 taskID );
 extern void HCI_ExtTaskRegister( uint8 taskID );
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_CONN_CFG) || (CTRL_CONFIG & INIT_CFG))
 /*******************************************************************************
  * @fn          HCI_SendDataPkt API
  *
@@ -660,14 +718,12 @@ extern hciStatus_t HCI_SendDataPkt( uint16 connHandle,
                                     uint8  pbFlag,
                                     uint16 pktLen,
                                     uint8  *pData );
-#endif // CTRL_CONFIG=(ADV_CONN_CFG | INIT_CFG)
 
 
 /*
 ** HCI API
 */
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_CONN_CFG) || (CTRL_CONFIG & INIT_CFG))
 /*******************************************************************************
  * @fn          HCI_DisconnectCmd API
  *
@@ -695,10 +751,8 @@ extern hciStatus_t HCI_SendDataPkt( uint16 connHandle,
  */
 extern hciStatus_t HCI_DisconnectCmd( uint16 connHandle,
                                       uint8  reason );
-#endif // CTRL_CONFIG=(ADV_CONN_CFG | INIT_CFG)
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_CONN_CFG) || (CTRL_CONFIG & INIT_CFG))
 /*******************************************************************************
  * @fn          HCI_ReadRemoteVersionInfoCmd API
  *
@@ -719,7 +773,6 @@ extern hciStatus_t HCI_DisconnectCmd( uint16 connHandle,
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_ReadRemoteVersionInfoCmd( uint16 connHandle );
-#endif // CTRL_CONFIG=(ADV_CONN_CFG | INIT_CFG)
 
 
 /*******************************************************************************
@@ -744,6 +797,27 @@ extern hciStatus_t HCI_SetEventMaskCmd( uint8 *pMask );
 
 
 /*******************************************************************************
+ * @fn          HCI_SetEventMaskPage2Cmd API
+ *
+ * @brief       This BT API is used to set the HCI event mask page 2, which is
+ *              used to determine which events are supported.
+ *
+ *              Related Events: HCI_CommandCompleteEvent
+ *
+ * input parameters
+ *
+ * @param       pMask - Pointer to an eight byte event mask.
+ *
+ * output parameters
+ *
+ * @param       None.
+ *
+ * @return      hciStatus_t
+ */
+extern hciStatus_t HCI_SetEventMaskPage2Cmd( uint8 *pMask );
+
+
+/*******************************************************************************
  * @fn          HCI_Reset API
  *
  * @brief       This BT API is used to reset the Link Layer.
@@ -763,7 +837,6 @@ extern hciStatus_t HCI_SetEventMaskCmd( uint8 *pMask );
 extern hciStatus_t HCI_ResetCmd( void );
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_CONN_CFG) || (CTRL_CONFIG & INIT_CFG))
 /*******************************************************************************
  * @fn          HCI_ReadTransmitPowerLevelCmd API
  *
@@ -785,10 +858,8 @@ extern hciStatus_t HCI_ResetCmd( void );
  */
 extern hciStatus_t HCI_ReadTransmitPowerLevelCmd( uint16 connHandle,
                                                   uint8  txPwrType );
-#endif // CTRL_CONFIG=(ADV_CONN_CFG | INIT_CFG)
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_CONN_CFG) || (CTRL_CONFIG & INIT_CFG))
 /*******************************************************************************
  * @fn          HCI_SetControllerToHostFlowCtrlCmd API
  *
@@ -813,10 +884,8 @@ extern hciStatus_t HCI_ReadTransmitPowerLevelCmd( uint16 connHandle,
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_SetControllerToHostFlowCtrlCmd( uint8 flowControlEnable );
-#endif // CTRL_CONFIG=(ADV_CONN_CFG | INIT_CFG)
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_CONN_CFG) || (CTRL_CONFIG & INIT_CFG))
 /*******************************************************************************
  * @fn          HCI_HostBufferSizeCmd API
  *
@@ -847,10 +916,8 @@ extern hciStatus_t HCI_HostBufferSizeCmd( uint16 hostAclPktLen,
                                           uint8  hostSyncPktLen,
                                           uint16 hostTotalNumAclPkts,
                                           uint16 hostTotalNumSyncPkts );
-#endif // CTRL_CONFIG=(ADV_CONN_CFG | INIT_CFG)
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_CONN_CFG) || (CTRL_CONFIG & INIT_CFG))
 /*******************************************************************************
  * @fn          HCI_HostNumCompletedPktCmd API
  *
@@ -868,7 +935,7 @@ extern hciStatus_t HCI_HostBufferSizeCmd( uint16 hostAclPktLen,
  *
  *              Note: It is assumed that there will be at most only one handle.
  *                    Even if more than one handle is provided, the Controller
- *                    does not track Host buffers as a function of connection 
+ *                    does not track Host buffers as a function of connection
  *                    handles (and isn't required to do so).
  *
  *              Related Events: HCI_CommandCompleteEvent
@@ -885,10 +952,50 @@ extern hciStatus_t HCI_HostBufferSizeCmd( uint16 hostAclPktLen,
  *
  * @return      hciStatus_t
  */
-extern hciStatus_t HCI_HostNumCompletedPktCmd( uint8  numHandles,
+extern hciStatus_t HCI_HostNumCompletedPktCmd( uint8   numHandles,
                                                uint16 *connHandles,
                                                uint16 *numCompletedPkts );
-#endif // CTRL_CONFIG=(ADV_CONN_CFG | INIT_CFG)
+
+
+/*******************************************************************************
+ * @fn          HCI_ReadAuthPayloadTimeoutCmd API
+ *
+ * @brief       This HCI API is used to read the connection's Authenticated
+ *              Payload Timeout value.
+ *
+ * input parameters
+ *
+ * @param       connHandle - The LL connection ID to read the APTO value from.
+ *
+ * output parameters
+ *
+ * @param       aptoValue  - Pointer to current APTO value, in units of 10ms.
+ *
+ * @return      hciStatus_t
+ */
+extern hciStatus_t HCI_ReadAuthPayloadTimeoutCmd( uint16  connHandle,
+                                                  uint16 *aptoValue );
+
+
+/*******************************************************************************
+ * @fn          HCI_WriteAuthPayloadTimeoutCmd API
+ *
+ * @brief       This HCI API is used to write the connection's Authenticated
+ *              Payload Timeout value.
+ *
+ * input parameters
+ *
+ * @param       connHandle - The LL connection ID to write the APTO value to.
+ * @param       aptoValue  - The APTO value, in units of 10ms.
+ *
+ * output parameters
+ *
+ * @param       None.
+ *
+ * @return      hciStatus_t
+ */
+extern hciStatus_t HCI_WriteAuthPayloadTimeoutCmd( uint16 connHandle,
+                                                   uint16 aptoValue );
 
 
 /*******************************************************************************
@@ -931,6 +1038,7 @@ extern hciStatus_t HCI_ReadLocalVersionInfoCmd( void );
 extern hciStatus_t HCI_ReadLocalSupportedCommandsCmd( void );
 
 
+// ROM WORKAROUND - Remove. This is not a BLE command.
 /*******************************************************************************
  * @fn          HCI_ReadLocalSupportedFeaturesCmd API
  *
@@ -1082,7 +1190,6 @@ extern hciStatus_t HCI_LE_ReadLocalSupportedFeaturesCmd( void );
 extern hciStatus_t HCI_LE_SetRandomAddressCmd( uint8 *pRandAddr );
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_NCONN_CFG) || (CTRL_CONFIG & ADV_CONN_CFG))
 /*******************************************************************************
  * @fn          HCI_LE_SetAdvParamCmd API
  *
@@ -1131,10 +1238,8 @@ extern hciStatus_t HCI_LE_SetAdvParamCmd( uint16 advIntervalMin,
                                           uint8  *directAddr,
                                           uint8  advChannelMap,
                                           uint8  advFilterPolicy );
-#endif // CTRL_CONFIG=(ADV_NCONN_CFG | ADV_CONN_CFG)
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_NCONN_CFG) || (CTRL_CONFIG & ADV_CONN_CFG))
 /*******************************************************************************
  * @fn          HCI_LE_SetAdvDataCmd API
  *
@@ -1155,10 +1260,8 @@ extern hciStatus_t HCI_LE_SetAdvParamCmd( uint16 advIntervalMin,
  */
 extern hciStatus_t HCI_LE_SetAdvDataCmd( uint8 dataLen,
                                          uint8 *pData );
-#endif // CTRL_CONFIG=(ADV_NCONN_CFG | ADV_CONN_CFG)
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_NCONN_CFG) || (CTRL_CONFIG & ADV_CONN_CFG))
 /*******************************************************************************
  * @fn          HCI_LE_SetScanRspDataCmd API
  *
@@ -1179,10 +1282,8 @@ extern hciStatus_t HCI_LE_SetAdvDataCmd( uint8 dataLen,
  */
 extern hciStatus_t HCI_LE_SetScanRspDataCmd( uint8 dataLen,
                                              uint8 *pData );
-#endif // CTRL_CONFIG=(ADV_NCONN_CFG | ADV_CONN_CFG)
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_NCONN_CFG) || (CTRL_CONFIG & ADV_CONN_CFG))
 /*******************************************************************************
  * @fn          HCI_LE_SetAdvEnableCmd API
  *
@@ -1201,10 +1302,8 @@ extern hciStatus_t HCI_LE_SetScanRspDataCmd( uint8 dataLen,
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_LE_SetAdvEnableCmd( uint8 advEnable );
-#endif // CTRL_CONFIG=(ADV_NCONN_CFG | ADV_CONN_CFG)
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_NCONN_CFG) || (CTRL_CONFIG & ADV_CONN_CFG))
 /*******************************************************************************
  * @fn          HCI_LE_ReadAdvChanTxPowerCmd API
  *
@@ -1223,10 +1322,8 @@ extern hciStatus_t HCI_LE_SetAdvEnableCmd( uint8 advEnable );
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_LE_ReadAdvChanTxPowerCmd( void );
-#endif // CTRL_CONFIG=(ADV_NCONN_CFG | ADV_CONN_CFG)
 
 
-#if defined(CTRL_CONFIG) && (CTRL_CONFIG & SCAN_CFG)
 /*******************************************************************************
  * @fn          HCI_LE_SetScanParamCmd API
  *
@@ -1255,10 +1352,8 @@ extern hciStatus_t HCI_LE_SetScanParamCmd( uint8  scanType,
                                            uint16 scanWindow,
                                            uint8  ownAddrType,
                                            uint8  filterPolicy );
-#endif // CTRL_CONFIG=SCAN_CFG
 
 
-#if defined(CTRL_CONFIG) && (CTRL_CONFIG & SCAN_CFG)
 /*******************************************************************************
  * @fn          HCI_LE_SetScanEnableCmd API
  *
@@ -1281,10 +1376,8 @@ extern hciStatus_t HCI_LE_SetScanParamCmd( uint8  scanType,
  */
 extern hciStatus_t HCI_LE_SetScanEnableCmd( uint8 scanEnable,
                                             uint8 filterDuplicates );
-#endif // CTRL_CONFIG=SCAN_CFG
 
 
-#if defined(CTRL_CONFIG) && (CTRL_CONFIG & INIT_CFG)
 /*******************************************************************************
  * @fn          HCI_LE_CreateConnCmd API
  *
@@ -1332,10 +1425,8 @@ extern hciStatus_t HCI_LE_CreateConnCmd( uint16 scanInterval,
                                          uint16 connTimeout,
                                          uint16 minLen,
                                          uint16 maxLen );
-#endif // CTRL_CONFIG=INIT_CFG
 
 
-#if defined(CTRL_CONFIG) && (CTRL_CONFIG & INIT_CFG)
 /*******************************************************************************
  * @fn          HCI_LE_CreateConnCancelCmd API
  *
@@ -1354,7 +1445,6 @@ extern hciStatus_t HCI_LE_CreateConnCmd( uint16 scanInterval,
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_LE_CreateConnCancelCmd( void );
-#endif // CTRL_CONFIG=INIT_CFG
 
 
 /*******************************************************************************
@@ -1442,7 +1532,6 @@ extern hciStatus_t HCI_LE_RemoveWhiteListCmd( uint8 addrType,
                                               uint8 *devAddr );
 
 
-#if defined(CTRL_CONFIG) && (CTRL_CONFIG & INIT_CFG)
 /*******************************************************************************
  * @fn          HCI_LE_ConnUpdateCmd API
  *
@@ -1453,7 +1542,7 @@ extern hciStatus_t HCI_LE_RemoveWhiteListCmd( uint8 addrType,
  *
  * input parameters
  *
- * @param       connHandle       - Time between Init scan events.
+ * @param       connHandle       - Connection handle.
  * @param       connIntervalMin  - Minimum allowed connection interval.
  * @param       connIntervalMax  - Maximum allowed connection interval.
  * @param       connLatency      - Number of skipped events (slave latency).
@@ -1474,10 +1563,8 @@ extern hciStatus_t HCI_LE_ConnUpdateCmd( uint16 connHandle,
                                          uint16 connTimeout,
                                          uint16 minLen,
                                          uint16 maxLen );
-#endif // CTRL_CONFIG=INIT_CFG
 
 
-#if defined(CTRL_CONFIG) && (CTRL_CONFIG & INIT_CFG)
 /*******************************************************************************
  * @fn          HCI_LE_SetHostChanClassificationCmd API
  *
@@ -1496,10 +1583,8 @@ extern hciStatus_t HCI_LE_ConnUpdateCmd( uint16 connHandle,
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_LE_SetHostChanClassificationCmd( uint8 *chanMap );
-#endif // CTRL_CONFIG=INIT_CFG
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_CONN_CFG) || (CTRL_CONFIG & INIT_CFG))
 /*******************************************************************************
  * @fn          HCI_LE_ReadChannelMapCmd API
  *
@@ -1518,10 +1603,8 @@ extern hciStatus_t HCI_LE_SetHostChanClassificationCmd( uint8 *chanMap );
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_LE_ReadChannelMapCmd( uint16 connHandle );
-#endif // CTRL_CONFIG=(ADV_CONN_CFG | INIT_CFG)
 
 
-#if defined(CTRL_CONFIG) && (CTRL_CONFIG & INIT_CFG)
 /*******************************************************************************
  * @fn          HCI_LE_ReadRemoteUsedFeaturesCmd API
  *
@@ -1541,7 +1624,6 @@ extern hciStatus_t HCI_LE_ReadChannelMapCmd( uint16 connHandle );
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_LE_ReadRemoteUsedFeaturesCmd( uint16 connHandle );
-#endif // CTRL_CONFIG=INIT_CFG
 
 
 /*******************************************************************************
@@ -1588,7 +1670,6 @@ extern hciStatus_t HCI_LE_EncryptCmd( uint8 *key,
 extern hciStatus_t HCI_LE_RandCmd( void );
 
 
-#if defined(CTRL_CONFIG) && (CTRL_CONFIG & INIT_CFG)
 /*******************************************************************************
  * @fn          HCI_LE_StartEncyptCmd API
  *
@@ -1615,10 +1696,8 @@ extern hciStatus_t HCI_LE_StartEncyptCmd( uint16 connHandle,
                                           uint8  *random,
                                           uint8  *encDiv,
                                           uint8  *ltk );
-#endif // CTRL_CONFIG=INIT_CFG
 
 
-#if defined(CTRL_CONFIG) && (CTRL_CONFIG & ADV_CONN_CFG)
 /*******************************************************************************
  * @fn          HCI_LE_LtkReqReplyCmd API
  *
@@ -1640,10 +1719,8 @@ extern hciStatus_t HCI_LE_StartEncyptCmd( uint16 connHandle,
  */
 extern hciStatus_t HCI_LE_LtkReqReplyCmd( uint16 connHandle,
                                           uint8  *ltk );
-#endif // CTRL_CONFIG=ADV_CONN_CFG
 
 
-#if defined(CTRL_CONFIG) && (CTRL_CONFIG & ADV_CONN_CFG)
 /*******************************************************************************
  * @fn          HCI_LE_LtkReqNegReplyCmd API
  *
@@ -1663,7 +1740,6 @@ extern hciStatus_t HCI_LE_LtkReqReplyCmd( uint16 connHandle,
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_LE_LtkReqNegReplyCmd( uint16 connHandle );
-#endif // CTRL_CONFIG=ADV_CONN_CFG
 
 
 /*******************************************************************************
@@ -1767,6 +1843,67 @@ extern hciStatus_t HCI_LE_TransmitterTestCmd( uint8 txFreq,
  */
 extern hciStatus_t HCI_LE_TestEndCmd( void );
 
+
+/*******************************************************************************
+ * @fn          HCI_LE_RemoteConnParamReqReplyCmd API
+ *
+ * @brief       This LE API is used to positively reply to the HCI LE Remote
+ *              Connection Parameter Request event from the Controller. This
+ *              command indicates that the Host has accepted the remote
+ *              device's request to change connection parameters.
+ *
+ *              Related Events: HCI_CommandCompleteEvent
+ *
+ * input parameters
+ *
+ * @param       connHandle       - Connection handle.
+ * @param       connIntervalMin  - Minimum allowed connection interval.
+ * @param       connIntervalMax  - Maximum allowed connection interval.
+ * @param       connLatency      - Number of skipped events (slave latency).
+ * @param       connTimeout      - Connection supervision timeout.
+ * @param       minLen           - Info parameter about min length of conn.
+ * @param       maxLen           - Info parameter about max length of conn.
+ *
+ * output parameters
+ *
+ * @param       None.
+ *
+ * @return      hciStatus_t
+ */
+extern hciStatus_t HCI_LE_RemoteConnParamReqReplyCmd( uint16 connHandle,
+                                                      uint16 connIntervalMin,
+                                                      uint16 connIntervalMax,
+                                                      uint16 connLatency,
+                                                      uint16 connTimeout,
+                                                      uint16 minLen,
+                                                      uint16 maxLen );
+
+
+/*******************************************************************************
+ * @fn          HCI_LE_RemoteConnParamReqNegReplyCmd API
+ *
+ * @brief       This LE API is used to positively reply to the HCI LE Remote
+ *              Connection Parameter Request event from the Controller. This
+ *              command indicates that the Host has accepted the remote
+ *              device's request to change connection parameters.
+ *
+ *              Related Events: HCI_CommandCompleteEvent
+ *
+ * input parameters
+ *
+ * @param       connHandle - Connection handle.
+ * @param       reason     - Reason connection parameter request was rejected.
+ *
+ * output parameters
+ *
+ * @param       None.
+ *
+ * @return      hciStatus_t
+ */
+extern hciStatus_t HCI_LE_RemoteConnParamReqNegReplyCmd( uint16 connHandle,
+                                                         uint8  reason );
+
+
 /*
 ** HCI Vendor Specific Comamnds: Link Layer Extensions
 */
@@ -1800,10 +1937,24 @@ extern hciStatus_t HCI_EXT_SetRxGainCmd( uint8 rxGain );
  *
  * input parameters
  *
- * @param       txPower - LL_EXT_TX_POWER_MINUS_23_DBM,
- *                        LL_EXT_TX_POWER_MINUS_6_DBM,
- *                        LL_EXT_TX_POWER_0_DBM,
- *                        LL_EXT_TX_POWER_4_DBM
+ * @param       txPower - For CC254x: HCI_EXT_TX_POWER_MINUS_23_DBM,
+ *                                    HCI_EXT_TX_POWER_MINUS_6_DBM,
+ *                                    HCI_EXT_TX_POWER_0_DBM,
+ *                                    HCI_EXT_TX_POWER_4_DBM
+ *
+ *                        For CC26xx: HCI_EXT_TX_POWER_MINUS_21_DBM,
+ *                                    HCI_EXT_TX_POWER_MINUS_18_DBM,
+ *                                    HCI_EXT_TX_POWER_MINUS_15_DBM,
+ *                                    HCI_EXT_TX_POWER_MINUS_12_DBM,
+ *                                    HCI_EXT_TX_POWER_MINUS_9_DBM,
+ *                                    HCI_EXT_TX_POWER_MINUS_6_DBM,
+ *                                    HCI_EXT_TX_POWER_MINUS_3_DBM,
+ *                                    HCI_EXT_TX_POWER_0_DBM,
+ *                                    HCI_EXT_TX_POWER_1_DBM,
+ *                                    HCI_EXT_TX_POWER_2_DBM,
+ *                                    HCI_EXT_TX_POWER_3_DBM,
+ *                                    HCI_EXT_TX_POWER_4_DBM,
+ *                                    HCI_EXT_TX_POWER_5_DBM
  *
  * output parameters
  *
@@ -1814,7 +1965,6 @@ extern hciStatus_t HCI_EXT_SetRxGainCmd( uint8 rxGain );
 extern hciStatus_t HCI_EXT_SetTxPowerCmd( uint8 txPower );
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_CONN_CFG) || (CTRL_CONFIG & INIT_CFG))
 /*******************************************************************************
  * @fn          HCI_EXT_OnePktPerEvtCmd API
  *
@@ -1835,7 +1985,6 @@ extern hciStatus_t HCI_EXT_SetTxPowerCmd( uint8 txPower );
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_EXT_OnePktPerEvtCmd( uint8 control );
-#endif // CTRL_CONFIG=(ADV_CONN_CFG | INIT_CFG)
 
 
 /*******************************************************************************
@@ -1926,7 +2075,6 @@ extern hciStatus_t HCI_EXT_DecryptCmd( uint8 *key,
 extern hciStatus_t HCI_EXT_SetLocalSupportedFeaturesCmd( uint8 *localFeatures );
 
 
-#if defined(CTRL_CONFIG) && (CTRL_CONFIG & ADV_CONN_CFG)
 /*******************************************************************************
  * @fn          HCI_EXT_SetFastTxResponseTimeCmd API
  *
@@ -1947,10 +2095,8 @@ extern hciStatus_t HCI_EXT_SetLocalSupportedFeaturesCmd( uint8 *localFeatures );
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_EXT_SetFastTxResponseTimeCmd( uint8 control );
-#endif // CTRL_CONFIG=ADV_CONN_CFG
 
 
-#if defined(CTRL_CONFIG) && (CTRL_CONFIG & ADV_CONN_CFG)
 /*******************************************************************************
  * @fn          HCI_EXT_SetSlaveLatencyOverrideCmd API
  *
@@ -1971,7 +2117,6 @@ extern hciStatus_t HCI_EXT_SetFastTxResponseTimeCmd( uint8 control );
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_EXT_SetSlaveLatencyOverrideCmd( uint8 control );
-#endif // CTRL_CONFIG=ADV_CONN_CFG
 
 
 /*******************************************************************************
@@ -2104,7 +2249,6 @@ extern hciStatus_t HCI_EXT_EndModemTestCmd( void );
 extern hciStatus_t HCI_EXT_SetBDADDRCmd( uint8 *bdAddr );
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_CONN_CFG) || (CTRL_CONFIG & INIT_CFG))
 /*******************************************************************************
  * @fn          HCI_EXT_SetSCACmd
  *
@@ -2132,7 +2276,7 @@ extern hciStatus_t HCI_EXT_SetBDADDRCmd( uint8 *bdAddr );
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_EXT_SetSCACmd( uint16 scaInPPM );
-#endif // CTRL_CONFIG=(ADV_CONN_CFG | INIT_CFG)
+
 
 /*******************************************************************************
  * @fn          HCI_EXT_EnablePTMCmd
@@ -2210,10 +2354,24 @@ extern hciStatus_t HCI_EXT_SaveFreqTuneCmd( void );
  *
  * input parameters
  *
- * @param       txPower - LL_EXT_TX_POWER_MINUS_23_DBM,
- *                        LL_EXT_TX_POWER_MINUS_6_DBM,
- *                        LL_EXT_TX_POWER_0_DBM,
- *                        LL_EXT_TX_POWER_4_DBM
+ * @param       txPower - For CC254x: LL_EXT_TX_POWER_MINUS_23_DBM,
+ *                                    LL_EXT_TX_POWER_MINUS_6_DBM,
+ *                                    LL_EXT_TX_POWER_0_DBM,
+ *                                    LL_EXT_TX_POWER_4_DBM
+ *
+ *                        For CC26xx: HCI_EXT_TX_POWER_MINUS_21_DBM,
+ *                                    HCI_EXT_TX_POWER_MINUS_18_DBM,
+ *                                    HCI_EXT_TX_POWER_MINUS_15_DBM,
+ *                                    HCI_EXT_TX_POWER_MINUS_12_DBM,
+ *                                    HCI_EXT_TX_POWER_MINUS_9_DBM,
+ *                                    HCI_EXT_TX_POWER_MINUS_6_DBM,
+ *                                    HCI_EXT_TX_POWER_MINUS_3_DBM,
+ *                                    HCI_EXT_TX_POWER_0_DBM,
+ *                                    HCI_EXT_TX_POWER_1_DBM,
+ *                                    HCI_EXT_TX_POWER_2_DBM,
+ *                                    HCI_EXT_TX_POWER_3_DBM,
+ *                                    HCI_EXT_TX_POWER_4_DBM,
+ *                                    HCI_EXT_TX_POWER_5_DBM
  *
  * output parameters
  *
@@ -2275,10 +2433,9 @@ extern hciStatus_t HCI_EXT_SetMaxDtmTxPowerCmd( uint8 txPower );
  *
  * @return      hciStatus_t
  */
-extern llStatus_t HCI_EXT_MapPmIoPortCmd( uint8 ioPort, uint8 ioPin );
+extern hciStatus_t HCI_EXT_MapPmIoPortCmd( uint8 ioPort, uint8 ioPin );
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_CONN_CFG) || (CTRL_CONFIG & INIT_CFG))
 /*******************************************************************************
  * @fn          HCI_EXT_DisconnectImmedCmd API
  *
@@ -2300,10 +2457,8 @@ extern llStatus_t HCI_EXT_MapPmIoPortCmd( uint8 ioPort, uint8 ioPin );
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_EXT_DisconnectImmedCmd( uint16 connHandle );
-#endif // CTRL_CONFIG=(ADV_CONN_CFG | INIT_CFG)
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_CONN_CFG) || (CTRL_CONFIG & INIT_CFG))
 /*******************************************************************************
  * @fn          HCI_EXT_PacketErrorRate Vendor Specific API
  *
@@ -2325,10 +2480,8 @@ extern hciStatus_t HCI_EXT_DisconnectImmedCmd( uint16 connHandle );
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_EXT_PacketErrorRateCmd( uint16 connHandle, uint8 command );
-#endif // CTRL_CONFIG=(ADV_CONN_CFG | INIT_CFG)
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_CONN_CFG) || (CTRL_CONFIG & INIT_CFG))
 /*******************************************************************************
  * @fn          HCI_EXT_PERbyChanCmd Vendor Specific API
  *
@@ -2357,7 +2510,6 @@ extern hciStatus_t HCI_EXT_PacketErrorRateCmd( uint16 connHandle, uint8 command 
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_EXT_PERbyChanCmd( uint16 connHandle, perByChan_t *perByChan );
-#endif // CTRL_CONFIG=(ADV_CONN_CFG | INIT_CFG)
 
 
 /*******************************************************************************
@@ -2403,7 +2555,6 @@ extern hciStatus_t HCI_EXT_ExtendRfRangeCmd( void );
 extern hciStatus_t HCI_EXT_HaltDuringRfCmd( uint8 mode );
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_NCONN_CFG) || (CTRL_CONFIG & ADV_CONN_CFG))
 /*******************************************************************************
  * @fn          HCI_EXT_AdvEventNoticeCmd Vendor Specific API
  *
@@ -2425,10 +2576,8 @@ extern hciStatus_t HCI_EXT_HaltDuringRfCmd( uint8 mode );
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_EXT_AdvEventNoticeCmd( uint8 taskID, uint16 taskEvent );
-#endif // CTRL_CONFIG=(ADV_NCONN_CFG | ADV_CONN_CFG)
 
 
-#if defined(CTRL_CONFIG) && (CTRL_CONFIG & ADV_CONN_CFG)
 /*******************************************************************************
  * @fn          HCI_EXT_ConnEventNoticeCmd Vendor Specific API
  *
@@ -2438,12 +2587,13 @@ extern hciStatus_t HCI_EXT_AdvEventNoticeCmd( uint8 taskID, uint16 taskEvent );
  *              value is taken to be "enable", while a zero valued taskEvent
  *              taken to be "disable".
  *
- *              Note: Currently, only a Slave connection is supported.
+ * Note: This command does not check if the taskID and/or taskEvent are valid!
  *
  * input parameters
  *
- * @param       taskID    - User's task ID.
- * @param       taskEvent - User's task event.
+ * @param       connHandle - The HCI connection ID for connection event notice.
+ * @param       taskID     - User's task ID.
+ * @param       taskEvent  - User's task event.
  *
  * output parameters
  *
@@ -2451,8 +2601,7 @@ extern hciStatus_t HCI_EXT_AdvEventNoticeCmd( uint8 taskID, uint16 taskEvent );
  *
  * @return      hciStatus_t
  */
-extern hciStatus_t HCI_EXT_ConnEventNoticeCmd( uint8 taskID, uint16 taskEvent );
-#endif // CTRL_CONFIG=ADV_CONN_CFG
+extern hciStatus_t HCI_EXT_ConnEventNoticeCmd( uint16 connHandle, uint8 taskID, uint16 taskEvent );
 
 
 /*******************************************************************************
@@ -2474,6 +2623,7 @@ extern hciStatus_t HCI_EXT_ConnEventNoticeCmd( uint8 taskID, uint16 taskEvent );
 extern hciStatus_t HCI_EXT_BuildRevisionCmd( uint8 mode, uint16 userRevNum );
 
 
+// ROM WORKAROUND - REMOVE FOR NEXT ROM FREEZE
 /*******************************************************************************
  * @fn          HCI_EXT_DelaySleepCmd Vendor Specific API
  *
@@ -2511,7 +2661,24 @@ extern hciStatus_t HCI_EXT_DelaySleepCmd( uint16 delay );
 extern hciStatus_t HCI_EXT_ResetSystemCmd( uint8 mode );
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_CONN_CFG) || (CTRL_CONFIG & INIT_CFG))
+/*******************************************************************************
+ * @fn          HCI_EXT_LLTestModeCmd Vendor Specific API
+ *
+ * @brief       This HCI Extension API is used to send a LL Test Mode test case.
+ *
+ * input parameters
+ *
+ * @param       testCase - See list of defines in ll_common.h.
+ *
+ * output parameters
+ *
+ * @param       None.
+ *
+ * @return      hciStatus_t
+ */
+extern hciStatus_t HCI_EXT_LLTestModeCmd( uint8 testCase );
+
+
 /*******************************************************************************
  * @fn          HCI_EXT_OverlappedProcessingCmd Vendor Specific API
  *
@@ -2530,10 +2697,8 @@ extern hciStatus_t HCI_EXT_ResetSystemCmd( uint8 mode );
  * @return      hciStatus_t
  */
 extern hciStatus_t HCI_EXT_OverlappedProcessingCmd( uint8 mode );
-#endif // CTRL_CONFIG=(ADV_CONN_CFG | INIT_CFG)
 
 
-#if defined(CTRL_CONFIG) && ((CTRL_CONFIG & ADV_CONN_CFG) || (CTRL_CONFIG & INIT_CFG))
 /*******************************************************************************
  * @fn          HCI_EXT_NumComplPktsLimitCmd Vendor Specific API
  *
@@ -2558,8 +2723,42 @@ extern hciStatus_t HCI_EXT_OverlappedProcessingCmd( uint8 mode );
  */
 extern hciStatus_t HCI_EXT_NumComplPktsLimitCmd( uint8 limit,
                                                  uint8 flushOnEvt );
-#endif // CTRL_CONFIG=(ADV_CONN_CFG | INIT_CFG)
 
+
+/*******************************************************************************
+ * @fn          HCI_EXT_GetConnInfoCmd Vendor Specific API
+ *
+ * @brief       This API is used to get connection related information, which
+ *              includes the number of allocated connections, the number of
+ *              active connections, and for each active connection, the
+ *              connection ID, the connection role (Master or Slave), the peer
+ *              address and peer address type. The number of allocated
+ *              connections is based on a default build value that can be
+ *              changed using MAX_NUM_BLE_CONNS. The number of active
+ *              connections refers to active BLE connections.
+ *
+ * Note: If all the parameters are NULL, then the command is assumed to have
+ *       originated from the transport layer. Otherwise, they are assumed to
+ *       have originated from a direct call by the Application and any
+ *       non-NULL pointer will be directly used.
+ *
+ * input parameters
+ *
+ * @param       numAllocConns  - Pointer for number of build time connections.
+ * @param       numActiveConns - Pointer for number of active BLE connections.
+ * @param       activeConnInfo - Pointer for active connection information.
+ *
+ * output parameters
+ *
+ * @param       numAllocConns  - Number of build time connections allowed.
+ * @param       numActiveConns - Number of active BLE connections.
+ * @param       activeConnInfo - Active connection information.
+ *
+ * @return      hciStatus_t
+ */
+extern hciStatus_t HCI_EXT_GetConnInfoCmd( uint8         *numAllocConns,
+                                           uint8         *numActiveConns,
+                                           hciConnInfo_t *activeConnInfo );
 
 #ifdef __cplusplus
 }

@@ -1,13 +1,13 @@
 /**************************************************************************************************
   Filename:       gapgattserver.h
-  Revised:        $Date: 2013-08-15 15:28:40 -0700 (Thu, 15 Aug 2013) $
-  Revision:       $Revision: 34986 $
+  Revised:        $Date: 2015-04-30 12:03:43 -0700 (Thu, 30 Apr 2015) $
+  Revision:       $Revision: 43621 $
 
   Description:    This file contains GAP GATT attribute definitions
                   and prototypes.
 
 
-  Copyright 2009 - 2013 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2009 - 2015 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -54,13 +54,13 @@ extern "C"
  * CONSTANTS
  */
 
-#define GAP_DEVICE_NAME_LEN                     (20+1)
+#define GAP_DEVICE_NAME_LEN                     21 // Excluding null-terminate char
 
 // Privacy Flag States
 #define GAP_PRIVACY_DISABLED                    0x00
 #define GAP_PRIVACY_ENABLED                     0x01
 
-// GAP GATT Server Parameters
+// GAP GATT Server Parameters used with GGS Get/Set Parameter and Application's Callback functions
 #define GGS_DEVICE_NAME_ATT                     0   // RW  uint8[GAP_DEVICE_NAME_LEN]
 #define GGS_APPEARANCE_ATT                      1   // RW  uint16
 #define GGS_PERI_PRIVACY_FLAG_ATT               2   // RW  uint8
@@ -74,10 +74,6 @@ extern "C"
 // GAP Services bit fields
 #define GAP_SERVICE                             0x00000001
 
-// Attribute ID used with application's callback when attribute value is changed OTA
-#define GGS_DEVICE_NAME_ID                      0
-#define GGS_APPEARANCE_ID                       1
-
 #if defined ( TESTMODES )
   // GGS TestModes
   #define GGS_TESTMODE_OFF                      0 // No Test mode
@@ -90,7 +86,7 @@ extern "C"
  * TYPEDEFS
  */
 // Callback to notify when attribute value is changed over the air.
-typedef void (*ggsAttrValueChange_t)( uint8 attrId );
+typedef void (*ggsAttrValueChange_t)( uint16 connHandle, uint8 attrId );
 
 // GAP GATT Server callback structure
 typedef struct

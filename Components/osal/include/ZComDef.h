@@ -1,12 +1,12 @@
 /**************************************************************************************************
   Filename:       ZComDef.h
-  Revised:        $Date: 2013-11-06 14:10:58 -0800 (Wed, 06 Nov 2013) $
-  Revision:       $Revision: 35938 $
+  Revised:        $Date: 2014-11-24 23:50:22 -0800 (Mon, 24 Nov 2014) $
+  Revision:       $Revision: 41235 $
 
   Description:    Type definitions and macros.
 
 
-  Copyright 2004-2013 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2004-2014 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -94,6 +94,12 @@ extern "C"
 #define COMPID_TEST_ASSOC_CONFIRM         22
 #define COMPID_TEST_REMOTE_DATA_CONFIRM   23
 
+// OSAL NV Item IDs
+#define ZCD_NV_EX_LEGACY                  0x0000
+#define ZCD_NV_EX_ADDRMGR                 0x0001
+#define ZCD_NV_EX_BINDING_TABLE           0x0002
+#define ZCD_NV_EX_DEVICE_LIST             0x0003
+
 // OSAL NV item IDs
 #define ZCD_NV_EXTADDR                    0x0001
 #define ZCD_NV_BOOTCOUNTER                0x0002
@@ -104,7 +110,8 @@ extern "C"
 #define ZCD_NV_NIB                        0x0021
 #define ZCD_NV_DEVICE_LIST                0x0022
 #define ZCD_NV_ADDRMGR                    0x0023
-#define ZCD_NV_POLL_RATE                  0x0024
+#define ZCD_NV_POLL_RATE_OLD16            0x0024 // Deprecated when poll rate changed from 16 to 32 bits
+#define ZCD_NV_POLL_RATE                  0x0035
 #define ZCD_NV_QUEUED_POLL_RATE           0x0025
 #define ZCD_NV_RESPONSE_POLL_RATE         0x0026
 #define ZCD_NV_REJOIN_POLL_RATE           0x0027
@@ -121,6 +128,7 @@ extern "C"
 #define ZCD_NV_CONCENTRATOR_ENABLE        0x0032
 #define ZCD_NV_CONCENTRATOR_DISCOVERY     0x0033
 #define ZCD_NV_CONCENTRATOR_RADIUS        0x0034
+                                       // 0x0035 used above for new 32 bit Poll Rate
 #define ZCD_NV_CONCENTRATOR_RC            0x0036
 #define ZCD_NV_NWK_MGR_MODE               0x0037
 #define ZCD_NV_SRC_RTG_EXPIRY_TIME        0x0038
@@ -149,6 +157,15 @@ extern "C"
 #define ZCD_NV_APS_DUPREJ_TIMEOUT_COUNT   0x004E
 #define ZCD_NV_APS_DUPREJ_TABLE_SIZE      0x004F
 
+// System statistics and metrics NV ID
+#define ZCD_NV_DIAGNOSTIC_STATS           0x0050
+
+// Additional NWK Layer NV item IDs
+#define ZCD_NV_NWK_PARENT_INFO            0x0051
+#define ZCD_NV_NWK_ENDDEV_TIMEOUT_DEF     0x0052
+#define ZCD_NV_END_DEV_TIMEOUT_VALUE      0x0053
+#define ZCD_NV_END_DEV_CONFIGURATION      0x0054
+
 // Security NV Item IDs
 #define ZCD_NV_SECURITY_LEVEL             0x0061
 #define ZCD_NV_PRECFGKEY                  0x0062
@@ -168,6 +185,10 @@ extern "C"
 #define ZCD_NV_RNG_COUNTER                0x006F
 #define ZCD_NV_RANDOM_SEED                0x0070
 #define ZCD_NV_TRUSTCENTER_ADDR           0x0071
+
+#define ZCD_NV_CERT_283                   0x0072
+#define ZCD_NV_PRIVATE_KEY_283            0x0073
+#define ZCD_NV_PUBLIC_KEY_283             0x0074
 
 // ZDO NV Item IDs
 #define ZCD_NV_USERDESC                   0x0081
@@ -229,6 +250,11 @@ extern "C"
 // 0x0201 - 0x02FF
 #define ZCD_NV_APS_LINK_KEY_DATA_START    0x0201     // APS key data
 #define ZCD_NV_APS_LINK_KEY_DATA_END      0x02FF
+
+// NV items used to duplicate system elements
+#define ZCD_NV_DUPLICATE_BINDING_TABLE            0x0300
+#define ZCD_NV_DUPLICATE_DEVICE_LIST              0x0301
+#define ZCD_NV_DUPLICATE_DEVICE_LIST_KA_TIMEOUT   0x0302
 
 // NV Items Reserved for applications (user applications)
 // 0x0401 – 0x0FFF
@@ -391,6 +417,7 @@ typedef struct
 #define MT_SYS_APP_MSG            0x23    // Raw data from an MT Sys message
 #define MT_SYS_APP_RSP_MSG        0x24    // Raw data output for an MT Sys message
 #define MT_SYS_OTA_MSG            0x25    // Raw data output for an MT OTA Rsp
+#define MT_SYS_APP_PB_ZCL_CMD     0x26    // MT APP PB ZCL command
 
 #define AF_DATA_CONFIRM_CMD       0xFD    // Data confirmation
 #define AF_REFLECT_ERROR_CMD      0xFE    // Reflected message error message

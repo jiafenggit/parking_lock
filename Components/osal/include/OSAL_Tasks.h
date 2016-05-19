@@ -1,7 +1,7 @@
 /**************************************************************************************************
   Filename:       OSAL_Tasks.h
-  Revised:        $Date: 2007-10-28 18:41:49 -0700 (Sun, 28 Oct 2007) $
-  Revision:       $Revision: 15799 $
+  Revised:        $Date: 2014-06-16 15:12:16 -0700 (Mon, 16 Jun 2014) $
+  Revision:       $Revision: 39036 $
 
   Description:    This file contains the OSAL Task definition and manipulation functions.
 
@@ -56,7 +56,11 @@ extern "C"
 /*********************************************************************
  * CONSTANTS
  */
+#ifdef USE_ICALL
+#define TASK_NO_TASK      ICALL_UNDEF_DEST_ID
+#else /* USE_ICALL */
 #define TASK_NO_TASK      0xFF
+#endif /* USE_ICALL */
 
 /*********************************************************************
  * TYPEDEFS

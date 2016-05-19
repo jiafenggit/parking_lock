@@ -1,14 +1,14 @@
 /**
   @headerfile:    sm.h
-  $Date: 2012-10-29 13:32:07 -0700 (Mon, 29 Oct 2012) $
-  $Revision: 31951 $
+  $Date: 2015-02-04 09:42:17 -0800 (Wed, 04 Feb 2015) $
+  $Revision: 42305 $
 
   @mainpage BLE SM API
 
   This file contains the interface to the SM.
 
 
-  Copyright 2009 - 2012 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2009 - 2015 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -114,10 +114,13 @@ typedef struct
   unsigned int sEncKey:1;    //!< Set to distribute slave encryption key
   unsigned int sIdKey:1;     //!< Set to distribute slave identity key
   unsigned int sSign:1;      //!< Set to distribute slave signing key
+  unsigned int sLinkKey:1;   //!< Set to derive slave link key from slave LTK
+  unsigned int sReserved:4;  //!< Reserved for slave - don't use
   unsigned int mEncKey:1;    //!< Set to distribute master encryption key
   unsigned int mIdKey:1;     //!< Set to distribute master identity key
   unsigned int mSign:1;      //!< Set to distribute master signing key
-  unsigned int reserved:2;   //!< Reserved - not to be used
+  unsigned int mLinkKey:1;   //!< Set to derive master link key from master LTK
+  unsigned int mReserved:4;  //!< Reserved for master - don't use
 } keyDist_t;
 
 /**
@@ -169,7 +172,8 @@ typedef struct
 {
   unsigned int bonding:2;    //!< Bonding flags
   unsigned int mitm:1;       //!< Man-In-The-Middle (MITM)
-  unsigned int reserved:5;   //!< Reserved - don't use
+  unsigned int sc:1;         //!< LE Secure Connection
+  unsigned int reserved:4;   //!< Reserved - don't use
 } authReq_t;
 
 /*-------------------------------------------------------------------
