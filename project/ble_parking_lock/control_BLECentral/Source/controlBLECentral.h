@@ -68,6 +68,7 @@ extern "C"
 #define  PERIOD_HANDLE_NET_DEVICE_EVENT               0x0020
 #define  PERIOD_HANDLE_REPLY_HEARTBEAT_EVENT          0x0040
 #define  PERIOD_HANDLE_UPDATE_TIME_EVENT              0x0080
+#define  ATTEMPT_TO_EST_CONN_TIMEOUT_EVT              0x0100
 
    
 /*********************************************************************

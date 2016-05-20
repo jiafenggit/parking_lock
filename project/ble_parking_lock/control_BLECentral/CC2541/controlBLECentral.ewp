@@ -286,6 +286,7 @@
           <state>xPOWER_SAVING</state>
           <state>xHAL_LCD=FALSE</state>
           <state>HAL_LED=TRUE</state>
+          <state>OSALMEM_METRICS=TRUE</state>
         </option>
         <option>
           <name>CCPreprocFile</name>
@@ -477,6 +478,8 @@
           <state>$PROJ_DIR$\..\..\Profiles\SimpleProfile</state>
           <state>$PROJ_DIR$\..\source</state>
           <state>$PROJ_DIR$\..\..\common\net</state>
+          <state>$PROJ_DIR$\..\..\..\..\Components\ble\controller\CC254x\include</state>
+          <state>$PROJ_DIR$\..\..\Profiles\Roles\CC254x</state>
         </option>
         <option>
           <name>CCStdIncCheck</name>
@@ -1293,10 +1296,7 @@
   <group>
     <name>PROFILES</name>
     <file>
-      <name>$PROJ_DIR$\..\..\Profiles\Roles\central.c</name>
-    </file>
-    <file>
-      <name>$PROJ_DIR$\..\..\Profiles\Roles\central.h</name>
+      <name>$PROJ_DIR$\..\..\Profiles\Roles\CC254x\central.c</name>
     </file>
     <file>
       <name>$PROJ_DIR$\..\..\Profiles\Roles\gap.c</name>
@@ -1315,6 +1315,9 @@
     </file>
     <file>
       <name>$PROJ_DIR$\..\..\Include\gattservapp.h</name>
+    </file>
+    <file>
+      <name>$PROJ_DIR$\..\..\Profiles\GATT\gattservapp_util.c</name>
     </file>
   </group>
   <group>

@@ -249,7 +249,7 @@ uint8 adv_filter=GAP_FILTER_POLICY_ALL;
  * LOCAL FUNCTIONS
  */
 static void own_addr_add_1_to_peer_addr(uint8 *p_own_addr,uint8* p_peer_addr);
-static void adv_inderct_addr_update();
+//static void adv_inderct_addr_update();
 static void start_info_init();
 static void simpleBLEPeripheral_ProcessOSALMsg( osal_event_hdr_t *pMsg );
 static void peripheralStateNotificationCB( gaprole_States_t newState );
@@ -520,7 +520,7 @@ static void start_info_init()
   SimpleProfile_SetParameter( PARAM_BLE_TIME_STAMP_CHAR, sizeof ( time_stamp_t ), &park_time );
 }
 
-
+/*
 static void adv_inderct_addr_update()
 {
   if(addr_update_flag)//如果已经是连接过的情况
@@ -550,6 +550,7 @@ static void adv_inderct_addr_update()
     app_write_string(bdAddr2Str(control_addr));
   }
 }
+*/
 /*********************************************************************
  * @fn      SimpleBLEPeripheral_ProcessEvent
  *
@@ -850,7 +851,10 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
       {
         //uint8 adv_enabled_status = 0;
         //GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn off Advertising
-        app_write_string("\r\n广播暂停！");
+        app_write_string("\r\n链接被主动断开!");
+        app_write_string("\r\n准备重新广播!");
+        uint8 adv_enabled_status = TRUE;
+        GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn off Advertising
         //adv_inderct_addr_update();
         //HalLcdWriteString( "Disconnected",  HAL_LCD_LINE_3 );
         //app_write_string("\r\n关闭广播,开始切换地址:");

@@ -107,19 +107,19 @@
 #define DEFAULT_RSSI_PERIOD                   1000
 
 // Whether to enable automatic parameter update request when a connection is formed
-#define DEFAULT_ENABLE_UPDATE_REQUEST         TRUE
+#define DEFAULT_ENABLE_UPDATE_REQUEST         FALSE
 
 // Minimum connection interval (units of 1.25ms) if automatic parameter update request is enabled
-#define DEFAULT_UPDATE_MIN_CONN_INTERVAL      400
+#define DEFAULT_UPDATE_MIN_CONN_INTERVAL      200
 
 // Maximum connection interval (units of 1.25ms) if automatic parameter update request is enabled
-#define DEFAULT_UPDATE_MAX_CONN_INTERVAL      400
+#define DEFAULT_UPDATE_MAX_CONN_INTERVAL      600
 
 // Slave latency to use if automatic parameter update request is enabled
 #define DEFAULT_UPDATE_SLAVE_LATENCY           0
 
 // Supervision timeout value (units of 10ms) if automatic parameter update request is enabled
-#define DEFAULT_UPDATE_CONN_TIMEOUT           250 
+#define DEFAULT_UPDATE_CONN_TIMEOUT           200 
 
 // Default passcode
 #define DEFAULT_PASSCODE                      19655
@@ -145,7 +145,7 @@
 
 #define  DEFAULT_START_TO_SCAN_DELAY          10//wkxboot in ms
 
-   
+#define  ATTEMPT_TO_EST_CONN_TIMEOUT_VALUE    2000
    
 #define  DAFAULT_ADDR_MATCH_LEN                       3
 
@@ -278,7 +278,7 @@ static void wkxboot_stop_discover();
 static void wkxboot_connect();
 static void wkxboot_disconnect();
 static void controlBLECentral_handle_uart_debug_cmd(uint8 dbg_cmd);
-static void own_addr_minus_1_to_peer_addr(uint8 *p_own_addr,uint8* p_peer_addr);
+//static void own_addr_minus_1_to_peer_addr(uint8 *p_own_addr,uint8* p_peer_addr);
 static bool ble_addr_is_match(uint8 *addr1,uint8 *addr2);
 static bool ble_full_addr_is_match(uint8 *addr1,uint8 *addr2);
 static bool ble_find_match_peer_addr_from_list(gapDevRec_t* addr_list,uint8 list_cnt);
@@ -311,7 +311,7 @@ static void app_start_net();
 
 static void controlBLECentralProcessGATTMsg( gattMsgEvent_t *pMsg );
 static void controlBLECentralRssiCB( uint16 connHandle, int8  rssi );
-static void controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent );
+static uint8 controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent );
 static void controlBLECentralPasscodeCB( uint8 *deviceAddr, uint16 connectionHandle,
                                         uint8 uiInputs, uint8 uiOutputs );
 static void controlBLECentralPairStateCB( uint16 connHandle, uint8 state, uint8 status );
@@ -372,11 +372,25 @@ void SimpleBLECentral_Init( uint8 task_id )
   // Setup GAP
   GAP_SetParamValue( TGAP_GEN_DISC_SCAN, DEFAULT_SCAN_DURATION );
   GAP_SetParamValue( TGAP_LIM_DISC_SCAN, DEFAULT_SCAN_DURATION );
-  
+ /* 
   GAP_SetParamValue(TGAP_CONN_EST_INT_MIN,DEFAULT_UPDATE_MIN_CONN_INTERVAL);
   GAP_SetParamValue(TGAP_CONN_EST_INT_MAX,DEFAULT_UPDATE_MAX_CONN_INTERVAL);
   GAP_SetParamValue(TGAP_CONN_EST_LATENCY,DEFAULT_UPDATE_SLAVE_LATENCY);
   GAP_SetParamValue( TGAP_CONN_EST_SUPERV_TIMEOUT,DEFAULT_UPDATE_CONN_TIMEOUT);
+  */
+  GAP_SetParamValue( TGAP_CONN_EST_SUPERV_TIMEOUT,DEFAULT_UPDATE_CONN_TIMEOUT);
+  uint16 min_con,max_con,to,lat;
+
+  min_con= GAP_GetParamValue(TGAP_CONN_EST_INT_MIN);
+  max_con=GAP_GetParamValue(TGAP_CONN_EST_INT_MAX);
+  lat=GAP_GetParamValue(TGAP_CONN_EST_LATENCY);
+  to=GAP_GetParamValue( TGAP_CONN_EST_SUPERV_TIMEOUT);
+  
+ app_write_string("\r\n当前链接参数:");
+ app_write_string( uint16_to_string(min_con));
+ app_write_string( uint16_to_string(max_con));
+ app_write_string( uint16_to_string(lat));
+ app_write_string( uint16_to_string(to));
 
   GGS_SetParameter( GGS_DEVICE_NAME_ATT, GAP_DEVICE_NAME_LEN, (uint8 *) simpleBLEDeviceName );
 
@@ -479,6 +493,15 @@ uint16 SimpleBLECentral_ProcessEvent( uint8 task_id, uint16 events )
     wkxboot_start_discover();
     return ( events ^ START_SCAN_EVT );
   }
+   if ( events & ATTEMPT_TO_EST_CONN_TIMEOUT_EVT )
+  {
+    if(simpleBLEState == BLE_STATE_CONNECTING)//如果依然在等待连接 证明连接过程超时
+    {
+    app_write_string("\r\n试图建立连接过程超时!关闭est请求!");
+    GAPCentralRole_TerminateLink(GAP_CONNHANDLE_INIT);
+    }
+    return ( events ^ ATTEMPT_TO_EST_CONN_TIMEOUT_EVT );
+  }
   
   if(events & PERIOD_HANDLE_SEND_QUEUE_EVENT)
   {
@@ -503,6 +526,18 @@ uint16 SimpleBLECentral_ProcessEvent( uint8 task_id, uint16 events )
   
    if(events & PERIOD_HANDLE_REPLY_HEARTBEAT_EVENT)
   {
+    uint16 i;
+    i=osal_heap_mem_used();
+    app_write_string("\r\nmem used:");
+    app_write_string(uint16_to_string(i));
+    
+    i= osal_heap_block_cnt();
+    app_write_string("\r\nmem block:");
+    app_write_string(uint16_to_string(i));
+    i= osal_heap_block_free();
+    app_write_string("\r\nmem free:");
+    app_write_string(uint16_to_string(i));
+    
     osal_start_timerEx(controlBLETaskId,PERIOD_HANDLE_REPLY_HEARTBEAT_EVENT,HANDLE_REPLY_HEARTBEAT_PERIOD);
     reply_sys_heartbeat(ble_msg_id++);
     return (events ^ PERIOD_HANDLE_REPLY_HEARTBEAT_EVENT);
@@ -705,10 +740,13 @@ static void wkxboot_write_car_in_info_in_peer()
       // Do a read or write as long as no other read or write is in progress
       if ( !simpleBLEProcedureInProgress )
       {
-       attWriteReq_t req;       
+       attWriteReq_t req;  
+       req.pValue = GATT_bm_alloc( simpleBLEConnHandle, ATT_WRITE_REQ, sizeof(ble_device_t), NULL );
+       if(req.pValue!= NULL)
+       {
        req.handle = BLE_car_in_CharHdl;
        req.len = sizeof(ble_device_t);;
-       *((ble_device_t*)req.value) = car_in_info;
+       *((ble_device_t*)req.pValue) = car_in_info;
        req.sig = 0;
        req.cmd = 0;
        status = GATT_WriteCharValue( simpleBLEConnHandle, &req, controlBLETaskId );    
@@ -723,10 +761,12 @@ static void wkxboot_write_car_in_info_in_peer()
       }
       else
       {
+        GATT_bm_free( (gattMsg_t *)&req, ATT_WRITE_REQ );
         cur_read_char_state=BLE_WRITE_STATE_IDLE;
         app_write_string("\r\ncar in 写值进程返回错误!准备断开连接...");
         wkxboot_disconnect();
       }
+       }
     }
    else
    {
@@ -769,7 +809,7 @@ static void wkxboot_read_time_stamp_info_in_peer()
       }
       else
       {
-        cur_read_char_state=BLE_READ_STAE_TIME_STAMP;
+        
         cur_read_char_state=BLE_READ_STAE_IDLE;
         app_write_string("\r\n读值进程返回错误!准备断开连接...");
         wkxboot_disconnect();
@@ -794,10 +834,13 @@ static void wkxboot_write_time_stamp_info_in_peer()
       // Do a read or write as long as no other read or write is in progress
       if ( !simpleBLEProcedureInProgress )
       {
-       attWriteReq_t req;       
+       attWriteReq_t req;   
+       req.pValue = GATT_bm_alloc( simpleBLEConnHandle, ATT_WRITE_REQ, sizeof(time_stamp_t), NULL );
+       if(req.pValue!= NULL)
+       {
        req.handle = BLE_time_stamp_CharHdl;
        req.len = sizeof(time_stamp_t);;
-       *((time_stamp_t*)req.value) = time_stamp_info;
+       *((time_stamp_t*)req.pValue) = time_stamp_info;
        req.sig = 0;
        req.cmd = 0;
        status = GATT_WriteCharValue( simpleBLEConnHandle, &req, controlBLETaskId );    
@@ -812,10 +855,12 @@ static void wkxboot_write_time_stamp_info_in_peer()
       }
       else
       {
+        GATT_bm_free( (gattMsg_t *)&req, ATT_WRITE_REQ );
         cur_write_char_state=BLE_WRITE_STATE_IDLE;
         app_write_string("\r\ntime stamp 写值进程返回错误!准备断开连接...");
         wkxboot_disconnect();
       }
+       }
     }
    else
    {
@@ -838,6 +883,8 @@ static void controlBLECentral_HandleKeys( uint8 shift, uint8 keys )
  if ( keys & KEY_FUN1 )
   {
     app_write_string("\r\n系统收到KEY_FUN1");
+  }
+    /*
     if ( simpleBLEState == BLE_STATE_CONNECTED &&
               BLE_lock_in_CharHdl != 0 &&
               simpleBLEProcedureInProgress == FALSE )
@@ -852,7 +899,7 @@ static void controlBLECentral_HandleKeys( uint8 shift, uint8 keys )
         
         req.handle = BLE_lock_in_CharHdl;
         req.len = sizeof(ble_device_t);;
-        *((ble_device_t*)req.value) = lock_in_info;
+        *((ble_device_t*)req.pValue) = lock_in_info;
         req.sig = 0;
         req.cmd = 0;
         status = GATT_WriteCharValue( simpleBLEConnHandle, &req, controlBLETaskId );    
@@ -877,6 +924,7 @@ static void controlBLECentral_HandleKeys( uint8 shift, uint8 keys )
       }
     }    
   } 
+    */
   if ( keys & KEY_FUN2 )
   {
     app_write_string("\r\n系统收到KEY_FUN2");
@@ -920,7 +968,7 @@ static void controlBLECentralProcessGATTMsg( gattMsgEvent_t *pMsg )
       // After a successful read, display the read value
       if(cur_read_char_state==BLE_READ_STAE_LOCK_IN)
       {
-      lock_in_info = *((ble_device_t*)pMsg->msg.readRsp.value);
+      lock_in_info = *((ble_device_t*)pMsg->msg.readRsp.pValue);
       app_write_string("\r\n读到lock in的值是:\r\n");
       uint8_array_to_string((uint8*)&lock_in_info,sizeof(ble_device_t));
       simpleBLEProcedureInProgress = FALSE;
@@ -931,7 +979,7 @@ static void controlBLECentralProcessGATTMsg( gattMsgEvent_t *pMsg )
       }
       else if(cur_read_char_state==BLE_READ_STAE_CAR_IN)
       {
-      car_in_info = *((ble_device_t*)pMsg->msg.readRsp.value);
+      car_in_info = *((ble_device_t*)pMsg->msg.readRsp.pValue);
       app_write_string("\r\n读到car in的值是:\r\n");
       uint8_array_to_string((uint8*)&car_in_info,sizeof(ble_device_t));
       simpleBLEProcedureInProgress = FALSE;
@@ -942,7 +990,7 @@ static void controlBLECentralProcessGATTMsg( gattMsgEvent_t *pMsg )
       }
       else if(cur_read_char_state==BLE_READ_STAE_TIME_STAMP)
       {
-      time_stamp_info = *((time_stamp_t*)pMsg->msg.readRsp.value);
+      time_stamp_info = *((time_stamp_t*)pMsg->msg.readRsp.pValue);
       app_write_string("\r\n读到time stamp的值是:\r\n");
       uint8_array_to_string((uint8*)&time_stamp_info,sizeof(time_stamp_t));
       simpleBLEProcedureInProgress = FALSE;
@@ -998,10 +1046,12 @@ static void controlBLECentralProcessGATTMsg( gattMsgEvent_t *pMsg )
   {
     simpleBLEGATTDiscoveryEvent( pMsg );
   }
+  
+   GATT_bm_free( &pMsg->msg, pMsg->method );
 }
 
 
-
+/*
 static void own_addr_minus_1_to_peer_addr(uint8 *p_own_addr,uint8* p_peer_addr)
 {
 
@@ -1024,7 +1074,7 @@ static void own_addr_minus_1_to_peer_addr(uint8 *p_own_addr,uint8* p_peer_addr)
 app_write_string("\r\n车载目标蓝牙地址:");
 app_write_string(bdAddr2Str(p_peer_addr));
 }
-
+*/
 static bool ble_addr_is_match(uint8 *addr1,uint8 *addr2)
 {
   for(uint8 i=B_ADDR_LEN-1;i>=DAFAULT_ADDR_MATCH_LEN;i--) 
@@ -1078,15 +1128,19 @@ static bool ble_find_match_peer_addr_from_list(gapDevRec_t* addr_list,uint8 list
 
 static void wkxboot_start_discover()
 {
+  uint8 status;
   if(!simpleBLEScanning)
   { 
        simpleBLEScanning = TRUE;
        simpleBLEScanRes = 0;
         
-        GAPCentralRole_StartDiscovery( DEFAULT_DISCOVERY_MODE,
+      status=  GAPCentralRole_StartDiscovery( DEFAULT_DISCOVERY_MODE,
                                        DEFAULT_DISCOVERY_ACTIVE_SCAN,
                                        DEFAULT_DISCOVERY_WHITE_LIST );  
-     app_write_string("\r\n开始扫描.....");
+      app_write_string("\r\n开始扫描.....");
+      app_write_string("\r\nstatus:");
+      app_write_string(uint8_to_string(status));
+    
   }
  else
  {
@@ -1128,15 +1182,18 @@ static void wkxboot_connect()
        {
          app_write_string("\r\n正在连接...");
          app_write_string(bdAddr2Str( peerAddr ));
+         
+         osal_start_timerEx(controlBLETaskId,ATTEMPT_TO_EST_CONN_TIMEOUT_EVT,ATTEMPT_TO_EST_CONN_TIMEOUT_VALUE);//建立连接的过程超时
+         app_write_string("\r\n开始监视连接超时...");
        }
        else
        {
          simpleBLEState =BLE_STATE_IDLE;
-         LL_CreateConnCancel();
+        // LL_CreateConnCancel();
          app_write_string("\r\n终止连接!连接过程出错!status:");
          app_write_string(uint8_to_string(rt_status));
-         app_write_string("\r\n1秒钟后重新开始扫描!");
-         osal_start_timerEx(controlBLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);//1s
+         app_write_string("\r\n稍后重新开始扫描!");
+         osal_start_timerEx(controlBLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);
        }
     }      
     else
@@ -1195,7 +1252,7 @@ static void controlBLECentralRssiCB( uint16 connHandle, int8 rssi )
  *
  * @return  none
  */
-static void controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent )
+static uint8 controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent )
 {
   switch ( pEvent->gap.opcode )
   {
@@ -1205,10 +1262,10 @@ static void controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         app_write_string("\r\nble4.0设备control初始化完成!");
         app_write_string("\r\n本机设备地址:");
         app_write_string(bdAddr2Str(pEvent->initDone.devAddr));
-       // own_addr_minus_1_to_peer_addr(pEvent->initDone.devAddr,ble_tar_addr);
-       // owner_info_init(pEvent->initDone.devAddr);
-        app_write_string("\r\n1秒钟后开始第一次扫描!");
-        osal_start_timerEx(controlBLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);//1s
+        //own_addr_minus_1_to_peer_addr(pEvent->initDone.devAddr,ble_tar_addr);
+        owner_addr_init(owner_id);
+        app_write_string("\r\n稍后开始第一次扫描!");
+        osal_start_timerEx(controlBLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);
       }
       break;
 
@@ -1286,14 +1343,21 @@ static void controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         */
       }
       app_write_string("\r\n完成一个扫描周期事件!");  
-      if(simpleBLEState != BLE_STATE_IDLE)
-      app_write_string("\r\n有个链接事件停止扫描!"); 
-      else
-      osal_start_timerEx(controlBLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);//0.1s
+      if(simpleBLEState == BLE_STATE_IDLE)//如果是空闲状态就开启扫描
+       {
+       osal_start_timerEx(controlBLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);      
+       app_write_string("\r\n空闲状态将继续扫描!");
+       }
+       else
+       {
+       app_write_string("\r\n非空闲状态不再扫描!");
+        }
       break;
 
     case GAP_LINK_ESTABLISHED_EVENT:
       {
+        osal_stop_timerEx(controlBLETaskId,ATTEMPT_TO_EST_CONN_TIMEOUT_EVT);//关闭建立连接的过程超时定时器
+       
         if ( pEvent->gap.hdr.status == SUCCESS )
         {          
           simpleBLEState = BLE_STATE_CONNECTED;
@@ -1328,6 +1392,7 @@ static void controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent )
           app_write_string("\r\n连接失败,status:");
           app_write_string(uint8_to_string(pEvent->gap.hdr.status));
           app_write_string("\r\n1秒钟后重新开始扫描!");
+          osal_start_timerEx(controlBLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);//1s
         
         }
       }
@@ -1335,6 +1400,8 @@ static void controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent )
 
     case GAP_LINK_TERMINATED_EVENT:
       {
+        osal_stop_timerEx(controlBLETaskId,ATTEMPT_TO_EST_CONN_TIMEOUT_EVT);//关闭建立连接的过程超时定时器
+ 
         simpleBLEState = BLE_STATE_IDLE;
         simpleBLEConnHandle = GAP_CONNHANDLE_INIT;
         simpleBLERssi = FALSE;
@@ -1348,7 +1415,7 @@ static void controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         
         app_write_string("\r\n连接断开!原因:");
         app_write_string(uint8_to_string(pEvent->linkTerminate.reason));          
-        
+       /* 
         if(ble_find_match_peer_addr_from_list(simpleBLEDevList,simpleBLEScanRes))
         {
           wkxboot_connect();
@@ -1358,7 +1425,9 @@ static void controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         app_write_string("\r\n1秒钟后重新开始扫描!");
         osal_start_timerEx(controlBLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);//1s
         }
-          
+         */
+       app_write_string("\r\n稍后重新开始扫描!");
+       osal_start_timerEx(controlBLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);
       }
       break;
 
@@ -1371,6 +1440,7 @@ static void controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent )
     default:
       break;
   }
+  return 0;
 }
 
 /*********************************************************************
@@ -1479,8 +1549,11 @@ static void simpleBLEGATTDiscoveryEvent( gattMsgEvent_t *pMsg )
       app_write_string("\r\nservice numInfo:");
       app_write_string(uint8_to_string(pMsg->msg.findByTypeValueRsp.numInfo));
       
-      simpleBLESvcStartHdl = pMsg->msg.findByTypeValueRsp.handlesInfo[0].handle;
-      simpleBLESvcEndHdl = pMsg->msg.findByTypeValueRsp.handlesInfo[0].grpEndHandle;
+      //simpleBLESvcStartHdl = pMsg->msg.findByTypeValueRsp.handlesInfo[0].handle;
+      //simpleBLESvcEndHdl = pMsg->msg.findByTypeValueRsp.handlesInfo[0].grpEndHandle;
+      simpleBLESvcStartHdl = ATT_ATTR_HANDLE(pMsg->msg.findByTypeValueRsp.pHandlesInfo, 0);
+      simpleBLESvcEndHdl = ATT_GRP_END_HANDLE(pMsg->msg.findByTypeValueRsp.pHandlesInfo, 0);
+      
       app_write_string("\r\n发现的service开始handle:");
       app_write_string(uint16_to_string(simpleBLESvcStartHdl));
       app_write_string("\r\n发现的service结束handle:");
@@ -1521,8 +1594,8 @@ static void simpleBLEGATTDiscoveryEvent( gattMsgEvent_t *pMsg )
     {  
       if( pMsg->msg.readByTypeRsp.numPairs > 0 )
       {
-      BLE_lock_in_CharHdl = BUILD_UINT16( pMsg->msg.readByTypeRsp.dataList[0],
-                                          pMsg->msg.readByTypeRsp.dataList[1] );
+      BLE_lock_in_CharHdl = BUILD_UINT16( pMsg->msg.readByTypeRsp.pDataList[0],
+                                          pMsg->msg.readByTypeRsp.pDataList[1] );
       
       app_write_string("\r\nlcok in numPairs:");
       app_write_string(uint8_to_string( pMsg->msg.readByTypeRsp.numPairs));
@@ -1555,8 +1628,8 @@ static void simpleBLEGATTDiscoveryEvent( gattMsgEvent_t *pMsg )
     {
       if(  pMsg->msg.readByTypeRsp.numPairs > 0 )
      {
-      BLE_car_in_CharHdl = BUILD_UINT16( pMsg->msg.readByTypeRsp.dataList[0],
-                                          pMsg->msg.readByTypeRsp.dataList[1] );     
+      BLE_car_in_CharHdl = BUILD_UINT16( pMsg->msg.readByTypeRsp.pDataList[0],
+                                          pMsg->msg.readByTypeRsp.pDataList[1] );     
       app_write_string("\r\ncar in numPairs:");
       app_write_string(uint8_to_string( pMsg->msg.readByTypeRsp.numPairs));
       
@@ -1589,8 +1662,8 @@ static void simpleBLEGATTDiscoveryEvent( gattMsgEvent_t *pMsg )
     { 
      if( pMsg->msg.readByTypeRsp.numPairs > 0 )
      {
-      BLE_time_stamp_CharHdl = BUILD_UINT16( pMsg->msg.readByTypeRsp.dataList[0],
-                                          pMsg->msg.readByTypeRsp.dataList[1] );
+      BLE_time_stamp_CharHdl = BUILD_UINT16( pMsg->msg.readByTypeRsp.pDataList[0],
+                                          pMsg->msg.readByTypeRsp.pDataList[1] );
       app_write_string("\r\ntime stamp numPairs:");
       app_write_string(uint8_to_string( pMsg->msg.readByTypeRsp.numPairs));
       
@@ -1652,7 +1725,10 @@ static void start_to_find_char_handle(uint8 handle_state)
         req.type.uuid[1] = HI_UINT16(PARAM_BLE_TIME_STAMP_CHAR_UUID);
         app_write_string("\r\n开始使用time_stamp_UUID获取char handle");
         }
-        GATT_ReadUsingCharUUID( simpleBLEConnHandle, &req, controlBLETaskId );
+       uint8 status;
+       status= GATT_ReadUsingCharUUID( simpleBLEConnHandle, &req, controlBLETaskId );
+       app_write_string("\r\nstatus:");
+       app_write_string(uint8_to_string(status));
       }
 }
 
