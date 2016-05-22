@@ -286,6 +286,7 @@
           <state>xPOWER_SAVING</state>
           <state>xHAL_LCD=TRUE</state>
           <state>HAL_LED=TRUE</state>
+          <state>OSALMEM_METRICS=TRUE</state>
         </option>
         <option>
           <name>CCPreprocFile</name>

@@ -441,7 +441,22 @@ uint16 lock_in_BLECentral_ProcessEvent( uint8 task_id, uint16 events )
     if ( (pMsg = osal_msg_receive( lock_in_BLETaskId )) != NULL )
     {
       lock_in_BLECentral_ProcessOSALMsg( (osal_event_hdr_t *)pMsg );
-
+      
+#if (OSALMEM_METRICS)
+    {
+    uint16 i;
+    i=osal_heap_mem_used();
+    app_write_string("\r\nmem used:");
+    app_write_string(uint16_to_string(i));   
+    i= osal_heap_block_cnt();
+    app_write_string("\r\nmem block:");
+    app_write_string(uint16_to_string(i));
+    i= osal_heap_block_free();
+    app_write_string("\r\nmem free:");
+    app_write_string(uint16_to_string(i));
+    }
+#endif
+    
       // Release the OSAL message
       VOID osal_msg_deallocate( pMsg );
     }
@@ -1553,6 +1568,8 @@ static uint8 lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
     default:
       break;
   }
+  
+  return (TRUE);
 }
 
 /*********************************************************************

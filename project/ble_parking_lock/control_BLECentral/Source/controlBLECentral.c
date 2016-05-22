@@ -526,17 +526,20 @@ uint16 SimpleBLECentral_ProcessEvent( uint8 task_id, uint16 events )
   
    if(events & PERIOD_HANDLE_REPLY_HEARTBEAT_EVENT)
   {
+#if  (OSALMEM_METRICS)
+    {
     uint16 i;
     i=osal_heap_mem_used();
     app_write_string("\r\nmem used:");
-    app_write_string(uint16_to_string(i));
-    
+    app_write_string(uint16_to_string(i));   
     i= osal_heap_block_cnt();
     app_write_string("\r\nmem block:");
     app_write_string(uint16_to_string(i));
     i= osal_heap_block_free();
     app_write_string("\r\nmem free:");
     app_write_string(uint16_to_string(i));
+    }
+#endif
     
     osal_start_timerEx(controlBLETaskId,PERIOD_HANDLE_REPLY_HEARTBEAT_EVENT,HANDLE_REPLY_HEARTBEAT_PERIOD);
     reply_sys_heartbeat(ble_msg_id++);
@@ -1440,7 +1443,7 @@ static uint8 controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent )
     default:
       break;
   }
-  return 0;
+  return (TRUE);
 }
 
 /*********************************************************************

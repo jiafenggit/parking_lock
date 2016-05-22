@@ -87,6 +87,7 @@ D:\嵌入式开发\TI_BLE4.0\车位锁temp\parking_lock\project\ble_parking_lock\Profile
 -DxPLUS_BROADCASTER=0
 -DxHAL_LCD=TRUE
 -DHAL_LED=TRUE
+-DOSALMEM_METRICS=TRUE
 -D__CHAR_BITS__=8
 -D__CHAR_MAX__=0xff
 -D__CHAR_MIN__=0
@@ -381,8 +382,8 @@ D:\嵌入式开发\TI_BLE4.0\车位锁temp\parking_lock\project\ble_parking_lock\Profile
 -D__PLAIN_INT_BITFIELD_IS_SIGNED__=1
 -D__HAS_LOCATED_DECLARATION__=1
 -D__IAR_COMPILERBASE__=593409
--D__DATE__="May 19 2016"
--D__TIME__="17:39:05"
+-D__DATE__="May 22 2016"
+-D__TIME__="09:45:29"
 -D__STDC__=1
 -D__STDC_VERSION__=199901L
 -D__STDC_HOSTED__=1
@@ -435,6 +436,7 @@ D:\嵌入式开发\TI_BLE4.0\车位锁temp\parking_lock\project\ble_parking_lock\Profile
 -DxPLUS_BROADCASTER=1
 -DxHAL_LCD=TRUE
 -DHAL_LED=TRUE
+-DOSALMEM_METRICS=TRUE
 -D__VERSION__="IAR C/C++ Compiler V8.30.1.41636 for 8051"
 -D__CODE_MEMORY_LIST1__()=__CODE_MEM_HELPER1__(__code, 0 )
 -D__CODE_MEMORY_LIST2__(_P1)=__CODE_MEM_HELPER2__(__code, 0 ,  _P1 )
