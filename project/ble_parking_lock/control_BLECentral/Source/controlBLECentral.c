@@ -220,7 +220,7 @@ static gapDevRec_t simpleBLEDevList[DEFAULT_MAX_SCAN_RES];
 static uint8 simpleBLEScanning = FALSE;
 
 // RSSI polling state
-static uint8 simpleBLERssi =FALSE;
+static uint8 simpleBLERssi =TRUE;
 
 // Connection handle of current connection 
 static uint16 simpleBLEConnHandle = GAP_CONNHANDLE_INIT;
@@ -1389,7 +1389,7 @@ static uint8 controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         {
           simpleBLEState = BLE_STATE_IDLE;
           simpleBLEConnHandle = GAP_CONNHANDLE_INIT;
-          simpleBLERssi = FALSE;
+          //simpleBLERssi = FALSE;
           simpleBLEDiscState = BLE_DISC_STATE_IDLE;
  
           app_write_string("\r\n¡¨Ω” ß∞‹,status:");
@@ -1407,7 +1407,7 @@ static uint8 controlBLECentralEventCB( gapCentralRoleEvent_t *pEvent )
  
         simpleBLEState = BLE_STATE_IDLE;
         simpleBLEConnHandle = GAP_CONNHANDLE_INIT;
-        simpleBLERssi = FALSE;
+        //simpleBLERssi = FALSE;
         simpleBLEDiscState = BLE_DISC_STATE_IDLE;
         BLE_lock_in_CharHdl =0;
         BLE_car_in_CharHdl=0;

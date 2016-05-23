@@ -1522,7 +1522,7 @@ static uint8 lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         {
           simpleBLEState = BLE_STATE_IDLE;
           simpleBLEConnHandle = GAP_CONNHANDLE_INIT;
-          simpleBLERssi = FALSE;
+          //simpleBLERssi = FALSE;
           simpleBLEDiscState = BLE_DISC_STATE_IDLE;
  
           app_write_string("\r\n¡¨Ω” ß∞‹,status:");
@@ -1542,7 +1542,7 @@ static uint8 lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
           
         simpleBLEState = BLE_STATE_IDLE;
         simpleBLEConnHandle = GAP_CONNHANDLE_INIT;
-        simpleBLERssi = FALSE;
+        //simpleBLERssi = FALSE;
         simpleBLEDiscState = BLE_DISC_STATE_IDLE;
         BLE_lock_in_CharHdl = 0;
         simpleBLEProcedureInProgress = FALSE;
