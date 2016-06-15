@@ -608,10 +608,10 @@ static void lock_in_BLECentral_handle_uart_debug_cmd(uint8 dbg_cmd)
     app_write_string("\r\n开始扫描车辆...");
     break;
   case UART_DEBUG_CMD_START_POSITIVE_RUN:
-     app_motor_set_target_state_top();
+     app_movable_arm_set_target_90_90();
      break;
   case UART_DEBUG_CMD_START_NEGATIVE_RUN:
-     app_motor_set_target_state_bottom();
+     app_movable_arm_set_target_0_0();
      break;
   default:
     app_write_string("\r\ninvalid cmd!");
@@ -894,7 +894,7 @@ static void wkxboot_process_park_authority()
   if(car_in_info.ble_active==CAR_HAS_PARKING_AUTHORITY)
   {   
    app_write_string("\r\n目标蓝牙有授权,可以停车!");
-   app_motor_set_target_state_bottom();//放下档杆  
+   app_movable_arm_set_target_0_0();//放下档杆  
   }
   else
   {
@@ -1119,29 +1119,18 @@ static void lock_in_BLECentralProcessGATTMsg( gattMsgEvent_t *pMsg )
 static void lock_in_BLECentral_handle_motor_state_event(motor_msg_t* pMsg)
 {
   app_write_string("\r\n系统收到马达状态信息!");
-  if(pMsg->state==MOTOR_ON_POSITIVE_RUN_STATE)
+  if(pMsg->state==MOTOR_STATE_ON_RUNNING)
   {
-    //app_write_string("\r\n暂停常状态车辆扫描!");
-    app_write_string("\r\n开启紧急状态车辆扫描!");
-    //osal_stop_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT);
     osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EMERGENCY_EVT,START_SCAN_CAR_ON_EMERGENCY); 
+    app_write_string("\r\n开启紧急状态车辆扫描!");
   }
-  if(pMsg->state==MOTOR_ON_TOP_STATE || pMsg->state==MOTOR_ON_NEGATIVE_RUN_STATE)
-  {
-    app_write_string("\r\n关闭紧急状态车辆扫描!");   
+  if(pMsg->state==MOTOR_STATE_ON_STOP)
+  {  
     osal_stop_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EMERGENCY_EVT);
+    app_write_string("\r\n关闭紧急状态车辆扫描!"); 
+    app_write_string("\r\n活动杆位置运行到位!");
   }
  
-  if(pMsg->state==MOTOR_ON_BOTTOM_STATE)
-   {
-     app_write_string("\r\n系统收到档杆放下信息!");
-     
-    //app_write_string("\r\n开启常状态车辆扫描!"); 
-    //if(simpleBLEState == BLE_STATE_CONNECTED )//在刚建立连接的时候
-    //osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT,START_SCAN_CAR_ON_CONNECT);
-    //else
-    //osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT,START_SCAN_CAR_ON_NORMAL); 
-   }
 }
 
 
@@ -1151,7 +1140,7 @@ static void lock_in_BLECentral_handle_scan_car_event(scan_car_t* pMsg)
   {
      app_write_string("\r\n系统收到有车信息!");   
      //car_exsit_cnt=0;
-     app_motor_set_target_state_bottom();
+     app_movable_arm_set_target_0_0();
     
      osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT,START_SCAN_CAR_ON_NORMAL);
      
@@ -1188,7 +1177,7 @@ static void lock_in_BLECentral_handle_scan_car_event(scan_car_t* pMsg)
     
     app_write_string("\r\n准备起杆!");
     //wkxboot_disconnect();
-    app_motor_set_target_state_top();
+    app_movable_arm_set_target_90_90();
   }
 }
 
@@ -1389,7 +1378,7 @@ static uint8 lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         app_write_string("\r\n1秒钟后开始第一次扫描!");
         osal_start_timerEx(lock_in_BLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);//1s
         
-        app_motor_set_target_state_top();//init state档杆竖起
+        app_movable_arm_set_target_90_90();//init state档杆竖起
       }
       break;
 
@@ -1405,7 +1394,7 @@ static uint8 lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         
         if(ble_addr_is_match(pEvent->deviceInfo.addr,ble_tar_addr) && pEvent->deviceInfo.pEvtData[9]== CAR_HAS_PARKING_AUTHORITY)
         {
-          app_motor_set_target_state_bottom();//降下档杆
+          app_movable_arm_set_target_0_0();//降下档杆
           osal_stop_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT);
           app_write_string("\r\n关闭平常车辆扫描!");
           
