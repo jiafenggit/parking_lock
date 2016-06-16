@@ -72,7 +72,7 @@ static void hal_check_movable_arm_position()
   {
     cur_movable_arm_state=MOVABLE_ARM_ON_90_180_STATE;
    }
- else if(!(MOTOR_CHECK_PORT & MOTOR_SPEED_ECHO_POS) && (MOTOR_CHECK_PORT & MOTOR_STOP_ECHO_POS))//如果speed为高，stop为高，档杆在0度点
+ else if((MOTOR_CHECK_PORT & MOTOR_SPEED_ECHO_POS) && (MOTOR_CHECK_PORT & MOTOR_STOP_ECHO_POS))//如果speed为高，stop为高，档杆在0度点
   {
     cur_movable_arm_state=MOVABLE_ARM_ON_0_0_STATE;
    }
