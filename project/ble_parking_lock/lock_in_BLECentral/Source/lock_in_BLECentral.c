@@ -1128,7 +1128,7 @@ static void lock_in_BLECentral_handle_motor_state_event(motor_msg_t* pMsg)
   {  
     osal_stop_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EMERGENCY_EVT);
     app_write_string("\r\n关闭紧急状态车辆扫描!"); 
-    app_write_string("\r\n活动杆位置运行到位!");
+    app_write_string("\r\n活动杆停止运行!");
   }
  
 }
@@ -1141,7 +1141,7 @@ static void lock_in_BLECentral_handle_scan_car_event(scan_car_t* pMsg)
      app_write_string("\r\n系统收到有车信息!");   
      //car_exsit_cnt=0;
      app_movable_arm_set_target_0_0();
-    
+     // hal_motor_stop_run();
      osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT,START_SCAN_CAR_ON_NORMAL);
      
   }

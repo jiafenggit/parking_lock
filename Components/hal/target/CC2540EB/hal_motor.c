@@ -8,7 +8,7 @@
 
 static void hal_motor_positive_run();
 static void hal_motor_negative_run();
-static void hal_motor_stop_run();
+//static void hal_motor_stop_run();
 static void hal_motor_check_open();//open led power
 static void hal_motor_check_close();//close led power
 static void hal_start_motor_speed_check_timer();
@@ -22,7 +22,7 @@ static void hal_process_movable_arm_state();
 
 process_motor_event_t  process_motor_event=NULL;
 
-static uint8 cur_motor_state=MOTOR_STATE_ON_RUNNING;//马达状态 stop or running
+static uint8 cur_motor_state=MOTOR_STATE_ON_STOP;//马达状态 stop or running
 static uint8 cur_movable_arm_state=MOVABLE_ARM_ON_90_90_STATE;//当前活动杆状态
 static uint8 tar_movable_arm_state=MOVABLE_ARM_ON_90_90_STATE;//目标活动杆状态
 
@@ -30,7 +30,9 @@ static uint8 tar_movable_arm_state=MOVABLE_ARM_ON_90_90_STATE;//目标活动杆状态
 void hal_motor_check_init()
 {
   MOTOR_CHECK_SET_IO_DIR();  
-  hal_motor_stop_run();
+  //hal_motor_stop_run();
+  motor_positive_inactive();
+  motor_negative_inactive();
 }
 
 
@@ -156,7 +158,7 @@ static void hal_motor_negative_run()
 }
 
 
-static void hal_motor_stop_run()
+void hal_motor_stop_run()
 {
   cur_motor_state=MOTOR_STATE_ON_STOP;
   hal_stop_motor_block_check_timer();
@@ -223,7 +225,7 @@ static void hal_process_movable_arm_state()
   case MOVABLE_ARM_ON_90_180_STATE:
     {
       hal_motor_negative_run();
-      hal_send_motor_state();
+      //hal_send_motor_state();
     }
     break;
   case MOVABLE_ARM_ON_0_0_STATE:

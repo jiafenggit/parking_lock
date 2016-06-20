@@ -75,7 +75,7 @@ void hal_process_motor_check_speed_event();
 void hal_process_motor_check_motor_block_event();
 void hal_process_motor_verify_event();//hal driver call
 
-
+void hal_motor_stop_run();
 void app_movable_arm_set_target_90_90();
 void app_movable_arm_set_target_0_0();
 void app_motor_start_periodic_verify_state();
