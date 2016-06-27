@@ -147,7 +147,7 @@
    
 #define  START_SCAN_CAR_ON_NORMAL             3000//3s  on connected time
 #define  START_SCAN_CAR_ON_EMERGENCY          666 //0.66s on emergenvy 
-#define  CAR_EXSIT_TRIGGER_VALUE              2 //2次没有检测到车辆就立起档杆
+#define  CAR_NO_EXSIT_TRIGGER_VALUE           2 //2次没有检测到车辆就立起档杆
 
 
 #define  PARK_FLAG_ENTER                      1
@@ -251,7 +251,8 @@ static bool simpleBLEProcedureInProgress = FALSE;
 //discovery target ble addr
 uint8 ble_tar_addr[6];
 ble_device_t owner_info,echo_info;
-uint8 car_exsit_cnt=0;
+uint8 car_sig_exsit_cnt=0;
+bool  car_body_exsit=FALSE;
 
 ble_device_t lock_in_info,car_in_info;
 time_stamp_t time_stamp_info;
@@ -1138,10 +1139,10 @@ static void lock_in_BLECentral_handle_scan_car_event(scan_car_t* pMsg)
 {
   if(pMsg->state==CAR_EXSIT)
   {
-     app_write_string("\r\n系统收到有车信息!");   
-     //car_exsit_cnt=0;
+     app_write_string("\r\n系统收到有车信息!"); 
+     car_body_exsit=TRUE;
      app_movable_arm_set_target_0_0();
-     // hal_motor_stop_run();
+ 
      osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT,START_SCAN_CAR_ON_NORMAL);
      
   }
@@ -1174,10 +1175,11 @@ static void lock_in_BLECentral_handle_scan_car_event(scan_car_t* pMsg)
      
     }
     */
-    
+    car_body_exsit=FALSE;
     app_write_string("\r\n准备起杆!");
     //wkxboot_disconnect();
-    app_movable_arm_set_target_90_90();
+    //app_movable_arm_set_target_90_90();
+    
   }
 }
 
@@ -1398,7 +1400,7 @@ static uint8 lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
           osal_stop_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT);
           app_write_string("\r\n关闭平常车辆扫描!");
           
-         // car_exsit_cnt=0;//不存在次数=0
+          car_sig_exsit_cnt=0;//存在次数=0
           //simpleBLEAddDeviceInfo( pEvent->deviceInfo.addr, pEvent->deviceInfo.addrType );        
           app_write_string("\r\n目标正确!");
           wkxboot_stop_discover();//关闭扫描
@@ -1428,6 +1430,8 @@ static uint8 lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
       {
         // discovery complete
         simpleBLEScanning = FALSE;
+        
+        
        // osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT,START_SCAN_CAR_ON_NORMAL);//检测车辆信息
        /****wkxboot***/
         /*
@@ -1468,6 +1472,13 @@ static uint8 lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
        {
        osal_start_timerEx(lock_in_BLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);
        
+        car_sig_exsit_cnt++;
+        if((!car_body_exsit) && (car_sig_exsit_cnt>CAR_NO_EXSIT_TRIGGER_VALUE ))
+        {
+        car_sig_exsit_cnt=0;
+        app_movable_arm_set_target_90_90();
+        
+        }
        app_write_string("\r\n空闲状态将继续扫描!");
        }
        else
