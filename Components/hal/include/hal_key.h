@@ -102,6 +102,7 @@ extern "C"
 #define SCAN_CAR_EXSIT_CHN          HAL_ADC_CHANNEL_6
 #define BATT_MONITOR_CHN            HAL_ADC_CHANNEL_7
 
+
 #define  KEY_FUN1                      1
 #define  KEY_FUN2                      2
 

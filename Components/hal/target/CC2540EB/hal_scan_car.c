@@ -2,12 +2,12 @@
 #include"hal_types.h"
 #include"osal.h"
 #include"osal_timers.h"
-#include"hal_scan_car.h"
 #include"hal_timer.h"
 #include"app_uart_init.h"
 #include"hal_drivers.h"
 #include"hal_key.h"
 #include"hal_adc.h"
+#include"hal_scan_car.h"
 
 
 static  process_scan_car_event_t process_scan_car_event;
