@@ -142,6 +142,10 @@
 #define  CUR_CONNET_TARGET_LOCK_IN            0x11 //当前连接的是lockin
 #define  CUR_CONNET_TARGET_CONTROL            0x22 //当前连接的是control
 
+#define  LED1_PERIOD_FLASH_VALUE              2000//2s闪烁一次
+
+
+
 /*********************************************************************
  * TYPEDEFS
  */
@@ -629,6 +633,15 @@ uint16 SimpleBLEPeripheral_ProcessEvent( uint8 task_id, uint16 events )
     return (events ^ SBP_PERIODIC_EVT);
   }
 
+    if ( events & LED1_PERIOD_FLASH_EVT )
+  {
+    osal_start_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT,LED1_PERIOD_FLASH_VALUE);
+    HalLedSet(HAL_LED_1,HAL_LED_MODE_BLINK);
+    
+    return ( events ^ LED1_PERIOD_FLASH_EVT );
+  }
+  
+  
   // Discard unknown events
   return 0;
 }
@@ -828,7 +841,9 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
     case GAPROLE_CONNECTED:
       {   
         app_write_string("\r\n设备已连接!");
-        addr_update_flag=TRUE;
+        
+        osal_start_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT,LED1_PERIOD_FLASH_VALUE);//开始闪烁
+        //addr_update_flag=TRUE;
         uint8 adv_enabled_status = FALSE;
         GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn off Advertising
         /*
@@ -869,6 +884,7 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
         //GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn off Advertising
         app_write_string("\r\n链接被主动断开!");
         app_write_string("\r\n准备重新广播!");
+        osal_stop_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT);//停止闪烁
         uint8 adv_enabled_status = TRUE;
         GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn off Advertising
         //adv_inderct_addr_update();
@@ -887,6 +903,8 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
       {
         app_write_string("\r\n连接通信超时!断开!");
         app_write_string("\r\n准备重新广播!");
+        osal_stop_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT);//停止闪烁
+        
         uint8 adv_enabled_status = TRUE;
         GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn off Advertising
         /*

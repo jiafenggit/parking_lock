@@ -1,14 +1,26 @@
 #include"hal_defs.h"
-#include"hal_motor.h"
+#include"hal_adc.h"
 #include"hal_types.h"
 #include"osal.h"
 #include "hal_drivers.h"
 #include "osal_timers.h"
 #include"app_uart_init.h"
+#include"hal_motor.h"
+
+
+#define  MOTOR_RATED_VOLTAGE              5.0    //5v
+#define  MOTOR_BLOCK_RES                  3.25 //3.25ohm
+#define  MOTOR_BLOCK_CHECK_RES            0.2  //0.2ohm
+
+#define  MOTOR_BLOCK_CHECK_CHN            HAL_ADC_CHANNEL_4
+#define  MOTOR_BLOCK_VOLTAGE              (((MOTOR_RATED_VOLTAGE/MOTOR_BLOCK_RES)*MOTOR_BLOCK_CHECK_RES)*100)            
 
 static void hal_motor_positive_run();
 static void hal_motor_negative_run();
-//static void hal_motor_stop_run();
+static void hal_motor_stop_run();
+static uint8 hal_get_motor_block_voltage();
+static bool hal_motor_is_block();
+
 static void hal_motor_check_open();//open led power
 static void hal_motor_check_close();//close led power
 static void hal_start_motor_speed_check_timer();
@@ -30,7 +42,7 @@ static uint8 tar_movable_arm_state=MOVABLE_ARM_ON_90_90_STATE;//目标活动杆状态
 void hal_motor_check_init()
 {
   MOTOR_CHECK_SET_IO_DIR();  
-  //hal_motor_stop_run();
+  
   motor_positive_inactive();
   motor_negative_inactive();
 }
@@ -41,6 +53,29 @@ void hal_motor_config(process_motor_event_t p)//on_board call
   if(process_motor_event==NULL)
      process_motor_event=p; 
 }
+
+static uint8 hal_get_motor_block_voltage()
+{
+  uint8 adc;
+  adc=HalAdcRead (MOTOR_BLOCK_CHECK_CHN,HAL_ADC_RESOLUTION_7);
+  return adc;
+}
+
+static bool hal_motor_is_block()
+{
+  uint8 v;
+  v=hal_get_motor_block_voltage();
+  
+  app_write_string("\r\nmotor block v:");
+  app_write_string(uint8_to_string(v));
+  
+  
+  if(v>=MOTOR_BLOCK_VOLTAGE)
+    return TRUE;
+  else
+    return FALSE;
+}
+
 
 static void hal_start_motor_block_check_timer()
 {
@@ -84,9 +119,24 @@ static void hal_check_movable_arm_position()
 /*堵转处理*/
 void hal_process_motor_check_motor_block_event()//检查到堵转就停止运行
 {
-  app_write_string("\r\n警告检测到赌转!");
-  
-  hal_motor_stop_run();
+  app_write_string("\r\n赌转检查...");
+  if(hal_motor_is_block())//如果检查到堵转 根据活动杆的位置进行相应的处理
+  {
+   app_write_string("\r\n堵转!");
+   
+   hal_motor_stop_run();  
+  }
+  else
+  {
+    if(cur_motor_state==MOTOR_STATE_ON_RUNNING)//只要马达在转动就检查堵转
+   {
+    hal_start_motor_block_check_timer();//重新堵转检查定时器
+    }
+    else
+    {
+    app_write_string("\r\n堵转检查完成!");  
+    }
+  }
 }
 
 /*运行过程处理*/
@@ -98,15 +148,10 @@ void hal_process_motor_check_speed_event()
   
   if(cur_movable_arm_state!=tar_movable_arm_state)
    {
-    hal_start_motor_speed_check_timer();//重新开始运行过程检测定时器 
-    if(cur_movable_arm_state==MOVABLE_ARM_ON_90_90_STATE)
-    {
-      hal_start_motor_block_check_timer();//重新开始堵转检查定时器
-    }
+    hal_start_motor_speed_check_timer();//重新开始运行过程检测定时器   
    }
   else//如果到达指定位置，motor停止运行
   {
-    hal_stop_motor_block_check_timer();//停止堵转检测定时器
     hal_motor_stop_run();//motor 停止运行
   }
   

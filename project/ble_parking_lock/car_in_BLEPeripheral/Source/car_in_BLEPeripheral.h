@@ -64,6 +64,12 @@ extern "C"
 // Simple BLE Peripheral Task Events
 #define SBP_START_DEVICE_EVT                              0x0001
 #define SBP_PERIODIC_EVT                                  0x0002
+   
+#define LED1_PERIOD_FLASH_EVT                             0x0004
+#define LED2_PERIOD_FLASH_EVT                             0x0008
+   
+   
+   
 
 /*********************************************************************
  * MACROS

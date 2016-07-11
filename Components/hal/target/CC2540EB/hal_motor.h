@@ -19,15 +19,20 @@
 #define  MOTOR_CHECK_TRIGGER_PWR_POS       BV(5)
 #define  MOTOR_CHECK_TRIGGER_PWR_SBIT      P0_5
 
+#define  MOTOR_BLOCK_CHECK_POS             BV(4)
+
 
 #define  MOTOR_CHECK_SET_IO_DIR()          \
 {                                          \
   P1SEL&=~(MOTOR_SPEED_ECHO_POS|MOTOR_STOP_ECHO_POS|MOTOR_POSITIVE_RUN_POS|MOTOR_NEGATIVE_RUN_POS);\
   P1DIR&=~(MOTOR_SPEED_ECHO_POS|MOTOR_STOP_ECHO_POS);\
   P1DIR|=(MOTOR_POSITIVE_RUN_POS|MOTOR_NEGATIVE_RUN_POS);\
-  P0SEL&=~MOTOR_CHECK_TRIGGER_PWR_POS;\
+  P0SEL&=~(MOTOR_CHECK_TRIGGER_PWR_POS|MOTOR_BLOCK_CHECK_POS);\
   P0DIR|=MOTOR_CHECK_TRIGGER_PWR_POS;\
+  P0INP|=MOTOR_BLOCK_CHECK_POS;\
 }
+
+
 
 #define  MOTOR_SPEED_ON_INIT              0
 #define  MOTOR_SPEED_ON_DRILL             1
@@ -35,8 +40,8 @@
 
 
 /*define motor timeout value*/
-#define  MOTOR_CHECK_BLOCK_VALUE          3500
-#define  MOTOR_CHECK_SPEED_VALUE          100
+#define  MOTOR_CHECK_BLOCK_VALUE          150 //0.15s
+#define  MOTOR_CHECK_SPEED_VALUE          150 //0.15s
 #define  MOTOR_VERIFY_VALUE               5000//5s
 
 /*define motor stat */
@@ -75,7 +80,6 @@ void hal_process_motor_check_speed_event();
 void hal_process_motor_check_motor_block_event();
 void hal_process_motor_verify_event();//hal driver call
 
-void hal_motor_stop_run();
 void app_movable_arm_set_target_90_90();
 void app_movable_arm_set_target_0_0();
 void app_motor_start_periodic_verify_state();

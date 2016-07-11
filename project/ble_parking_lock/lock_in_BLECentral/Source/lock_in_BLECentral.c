@@ -152,6 +152,10 @@
 
 #define  PARK_FLAG_ENTER                      1
 #define  PARK_FLAG_EXIT                       2
+   
+#define  LED1_PERIOD_FLASH_VALUE              2000//2s闪烁一次
+   
+
 // Application states
 enum
 {
@@ -519,6 +523,14 @@ uint16 lock_in_BLECentral_ProcessEvent( uint8 task_id, uint16 events )
     app_start_to_scan_car();
     osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EMERGENCY_EVT,START_SCAN_CAR_ON_EMERGENCY);//restart
     return ( events ^ START_SCAN_CAR_EMERGENCY_EVT );
+  }
+  
+   if ( events & LED1_PERIOD_FLASH_EVT )
+  {
+    osal_start_timerEx(lock_in_BLETaskId,LED1_PERIOD_FLASH_EVT,LED1_PERIOD_FLASH_VALUE);
+    HalLedSet(HAL_LED_1,HAL_LED_MODE_BLINK);
+    
+    return ( events ^ LED1_PERIOD_FLASH_EVT );
   }
   
   // Discard unknown events
@@ -1380,6 +1392,7 @@ static uint8 lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         app_write_string("\r\n1秒钟后开始第一次扫描!");
         osal_start_timerEx(lock_in_BLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);//1s
         
+        osal_start_timerEx(lock_in_BLETaskId,LED1_PERIOD_FLASH_EVT,LED1_PERIOD_FLASH_VALUE);//led1开始闪烁
         app_movable_arm_set_target_90_90();//init state档杆竖起
       }
       break;
