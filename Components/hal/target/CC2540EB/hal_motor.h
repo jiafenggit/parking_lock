@@ -41,10 +41,10 @@
 
 /*define motor timeout value*/
 #define  MOTOR_CHECK_BLOCK_VALUE          150 //0.15s
-#define  MOTOR_CHECK_SPEED_VALUE          150 //0.15s
+#define  MOTOR_CHECK_SPEED_VALUE          50 //0.05s
 #define  MOTOR_VERIFY_VALUE               5000//5s
 
-/*define motor stat */
+/*define motor state */
 #define  MOTOR_STATE_ON_RUNNING                  1
 #define  MOTOR_STATE_ON_STOP                     2
 
@@ -54,6 +54,14 @@
 #define  MOVABLE_ARM_ON_0_90_STATE               3
 #define  MOVABLE_ARM_ON_90_180_STATE             4
 #define  MOVABLE_ARM_ON_INIT_STATE               5
+
+#define  SIGNAL_START_TO_SCAN_CAR                1
+#define  SIGNAL_STOP_TO_SCAN_CAR                 2
+#define  SIGNAL_START_PERIODIC_VERIFY            3
+#define  SIGNAL_STOP_PERIODIC_VERIFY             4
+#define  SIGNAL_MOVABLE_ARM_ON_TOP               5
+#define  SIGNAL_MOVABLE_ARM_ON_BOTTOM            6
+
 
 
 #define  MOTOR_POSITIVE_RUN_POLARITY         ACTIVE_HIGH
@@ -83,6 +91,7 @@ void hal_process_motor_verify_event();//hal driver call
 void app_movable_arm_set_target_90_90();
 void app_movable_arm_set_target_0_0();
 void app_motor_start_periodic_verify_state();
+void app_motor_stop_periodic_verify_state();
 
 
 

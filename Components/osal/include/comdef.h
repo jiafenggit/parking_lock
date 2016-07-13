@@ -133,7 +133,7 @@ typedef uint32  uint24;
 
 #define  SCAN_CAR_EVENT           0xE0
 #define  UART_DEBUG_CMD           0xE1
-#define  MOTOR_STATE_EVENT        0xE2
+#define  MOTOR_SIGNAL_EVENT        0xE2
 #define  BATT_UPDATE_EVENT        0xE3
 
 

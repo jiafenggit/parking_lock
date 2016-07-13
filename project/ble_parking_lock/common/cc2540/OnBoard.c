@@ -376,7 +376,7 @@ static uint8 OnBoard_motorCallback(uint8 state)
     msgPtr = (motor_msg_t *)osal_msg_allocate( sizeof(motor_msg_t) );
     if ( msgPtr )
     {
-      msgPtr->hdr.event = MOTOR_STATE_EVENT;
+      msgPtr->hdr.event = MOTOR_SIGNAL_EVENT;
       msgPtr->state=state;
       osal_msg_send( registeredmotorTaskID, (uint8 *)msgPtr );
     }
