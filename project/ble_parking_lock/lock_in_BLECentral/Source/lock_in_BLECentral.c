@@ -80,7 +80,7 @@
 #define DEFAULT_MAX_SCAN_RES                  8
 
 // Scan duration in ms
-#define DEFAULT_SCAN_DURATION                 6000
+#define DEFAULT_SCAN_DURATION                 500
 
 // Discovey mode (limited, general, all)
 #define DEFAULT_DISCOVERY_MODE               DEVDISC_MODE_ALL
@@ -104,16 +104,16 @@
 #define DEFAULT_ENABLE_UPDATE_REQUEST         TRUE
 
 // Minimum connection interval (units of 1.25ms) if automatic parameter update request is enabled
-#define DEFAULT_UPDATE_MIN_CONN_INTERVAL      200
+#define DEFAULT_UPDATE_MIN_CONN_INTERVAL      800
 
 // Maximum connection interval (units of 1.25ms) if automatic parameter update request is enabled
-#define DEFAULT_UPDATE_MAX_CONN_INTERVAL      600
+#define DEFAULT_UPDATE_MAX_CONN_INTERVAL      800
 
 // Slave latency to use if automatic parameter update request is enabled
 #define DEFAULT_UPDATE_SLAVE_LATENCY           0
 
 // Supervision timeout value (units of 10ms) if automatic parameter update request is enabled
-#define DEFAULT_UPDATE_CONN_TIMEOUT           250 //断开连接超时时间设置
+#define DEFAULT_UPDATE_CONN_TIMEOUT           300 //断开连接超时时间设置
 
 // Default passcode
 #define DEFAULT_PASSCODE                      19655
@@ -131,7 +131,7 @@
 #define DEFAULT_IO_CAPABILITIES               GAPBOND_IO_CAP_DISPLAY_ONLY
 
 // Default service discovery timer delay in ms
-#define DEFAULT_SVC_DISCOVERY_DELAY           1 //wkxboot 1000
+#define DEFAULT_SVC_DISCOVERY_DELAY           500 //wkxboot 1000
 
 // TRUE to filter discovery results on desired service UUID
 #define DEFAULT_DEV_DISC_BY_SVC_UUID          FALSE  //TRUE
@@ -139,15 +139,15 @@
 
 #define  ATTEMPT_TO_EST_CONN_TIMEOUT_VALUE    2000
    
-#define  DEFAULT_START_TO_SCAN_DELAY          1//wkxboot in ms
+#define  DEFAULT_START_TO_SCAN_DELAY          500//wkxboot in ms
 #define  DEFAULT_GET_BAT_INFO_VALUE           5000//in ms
    
 #define  BAT_VOLTAGE_SCALE                    4.7 //1:4.7
 #define  BAT_FULL_VOLTAGE                     5.8  
    
-#define  START_SCAN_CAR_ON_NORMAL             3000//3s  on connected time
+//#define  START_SCAN_CAR_ON_NORMAL           3000//3s  on connected time
 #define  START_SCAN_CAR_ON_EMERGENCY          666 //0.66s on emergenvy 
-#define  CAR_NO_EXSIT_TRIGGER_VALUE           2 //2次没有检测到车辆就立起档杆
+#define  CAR_NO_EXSIT_TRIGGER_VALUE           20 //20次没有检测到车辆就立起档杆
 
 
 #define  PARK_FLAG_ENTER                      1
@@ -1105,7 +1105,7 @@ static void lock_in_BLECentralProcessGATTMsg( gattMsgEvent_t *pMsg )
          app_write_string("\r\nlock in写的值是:\r\n");
          uint8_array_to_string((uint8*)&lock_in_info,sizeof(ble_device_t));   
          app_write_string("\r\n回写数据完成!");
-         
+    /*     
     if ( simpleBLEState == BLE_STATE_CONNECTED )//更新参数
     {
     uint8 i= GAPCentralRole_UpdateLink( simpleBLEConnHandle,
@@ -1116,7 +1116,7 @@ static void lock_in_BLECentralProcessGATTMsg( gattMsgEvent_t *pMsg )
     app_write_string("\r\n返回结果:");
     app_write_string(uint8_to_string(i));
     }
-
+    */
       }
     }   
       

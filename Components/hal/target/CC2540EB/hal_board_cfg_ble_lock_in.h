@@ -308,7 +308,7 @@ st( \
 
 /* debug config*/
 
-#define  UART_DEBUG  1  //0 close
+#define  UART_DEBUG   1  //0 close
 
 
 /* Driver Configuration */

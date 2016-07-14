@@ -308,7 +308,7 @@ st( \
 
 /* debug config*/
 
-#define  UART_DEBUG  1  //0 close
+#define  UART_DEBUG  0  //0 close
 
 
 /* Driver Configuration */
@@ -378,7 +378,7 @@ st( \
 
 /* Set to TRUE enable UART usage, FALSE disable it */
 #ifndef HAL_UART
-#define HAL_UART TRUE
+#define HAL_UART FALSE
 #endif
 
 #if HAL_UART
