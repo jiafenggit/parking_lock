@@ -147,7 +147,7 @@
    
 //#define  START_SCAN_CAR_ON_NORMAL           3000//3s  on connected time
 #define  START_SCAN_CAR_ON_EMERGENCY          666 //0.66s on emergenvy 
-#define  CAR_NO_EXSIT_TRIGGER_VALUE           20 //20次没有检测到车辆就立起档杆
+#define  CAR_SIG_NO_EXSIT_TRIGGER_VALUE       15  //15次没有检测到信号就立起档杆
 
 
 #define  PARK_FLAG_ENTER                      1
@@ -1171,12 +1171,13 @@ static void lock_in_BLECentral_handle_scan_car_event(scan_car_t* pMsg)
   if(pMsg->state==CAR_EXSIT)
   {
      app_write_string("\r\n系统收到有车信息!"); 
+     car_sig_exsit_cnt=0;
      app_movable_arm_set_target_0_0();    
   }
    if(pMsg->state==CAR_NOT_EXSIT )
   {
     app_write_string("\r\n系统收到无车信息!");       
-    if((car_sig_exsit_cnt>CAR_NO_EXSIT_TRIGGER_VALUE ))
+    if((car_sig_exsit_cnt>=CAR_SIG_NO_EXSIT_TRIGGER_VALUE ))
       {
       app_write_string("\r\n无信号次数超限,起杆!");
       car_sig_exsit_cnt=0;
@@ -1475,6 +1476,7 @@ static uint8 lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         if(!movable_arm_on_top)
         {
         car_sig_exsit_cnt++;
+        if(car_sig_exsit_cnt>=CAR_SIG_NO_EXSIT_TRIGGER_VALUE-1)//临界值扫描车辆
         app_start_to_scan_car();
         }
         

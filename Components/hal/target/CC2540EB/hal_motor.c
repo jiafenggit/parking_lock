@@ -69,8 +69,8 @@ static bool hal_motor_is_block()
   app_write_string("\r\nmotor block v:");
   app_write_string(uint8_to_string(v));
   
-  
-  if(v>=MOTOR_BLOCK_VOLTAGE)
+ 
+  if(v<0x80 && v>=MOTOR_BLOCK_VOLTAGE)//超过0x80就是负电压不正确
     return TRUE;
   else
     return FALSE;
