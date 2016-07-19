@@ -68,6 +68,9 @@ extern "C"
 #define LED1_PERIOD_FLASH_EVT                             0x0004
 #define LED2_PERIOD_FLASH_EVT                             0x0008
    
+#define FEED_WATCH_DOG_EVT                                0x0010
+   
+   
    
    
 

@@ -77,7 +77,7 @@
 
 #include"app_uart_init.h"
 
-
+#include"hal_watchdog.h"
 #if HAL_BATT_CHECK >0
 #include"hal_batt.h"
 #endif
@@ -143,7 +143,7 @@
 #define  CUR_CONNET_TARGET_CONTROL            0x22 //当前连接的是control
 
 #define  LED1_PERIOD_FLASH_VALUE              2000//2s闪烁一次
-
+#define  FEED_WATCH_DOG_VALUE                 900 //900ms喂一次
 
 
 /*********************************************************************
@@ -481,7 +481,10 @@ void SimpleBLEPeripheral_Init( uint8 task_id )
   HCI_EXT_MapPmIoPortCmd( HCI_EXT_PM_IO_PORT_P0, HCI_EXT_PM_IO_PORT_PIN7 );
 
 #endif // defined ( DC_DC_P0_7 )
-
+  
+  
+  hal_watchdog_init(WATCHDOG_MODE,CLOCK_PERIOD_1000MS);
+  osal_start_timerEx(simpleBLEPeripheral_TaskID,FEED_WATCH_DOG_EVT,FEED_WATCH_DOG_VALUE);
   // Setup a delayed profile startup
   osal_set_event( simpleBLEPeripheral_TaskID, SBP_START_DEVICE_EVT );
 
@@ -639,6 +642,14 @@ uint16 SimpleBLEPeripheral_ProcessEvent( uint8 task_id, uint16 events )
     HalLedSet(HAL_LED_1,HAL_LED_MODE_BLINK);
     
     return ( events ^ LED1_PERIOD_FLASH_EVT );
+  }
+  
+   if ( events & FEED_WATCH_DOG_EVT )
+  {
+    osal_start_timerEx(simpleBLEPeripheral_TaskID,FEED_WATCH_DOG_EVT,FEED_WATCH_DOG_VALUE);
+    
+    hal_feed_watchdog();   
+    return ( events ^ FEED_WATCH_DOG_EVT );
   }
   
   

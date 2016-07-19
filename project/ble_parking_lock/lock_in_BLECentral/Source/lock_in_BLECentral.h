@@ -68,6 +68,8 @@ extern "C"
 #define ATTEMPT_TO_EST_CONN_TIMEOUT_EVT               0x0080
   
 #define LED1_PERIOD_FLASH_EVT                         0x0100
+#define FEED_WATCH_DOG_EVT                            0x0200
+   
    
    
    

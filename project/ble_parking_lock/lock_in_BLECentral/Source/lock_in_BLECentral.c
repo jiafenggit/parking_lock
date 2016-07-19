@@ -63,6 +63,8 @@
 #include"hal_scan_car.h"
 #include"hal_motor.h"
 #include"hal_batt.h"
+#include"hal_watchdog.h"
+
 
 
 /*********************************************************************
@@ -154,6 +156,7 @@
 #define  PARK_FLAG_EXIT                       2
    
 #define  LED1_PERIOD_FLASH_VALUE              2000//2s闪烁一次
+#define  FEED_WATCH_DOG_VALUE                 900 //900ms喂一次
    
 
 // Application states
@@ -411,9 +414,10 @@ void lock_in_BLECentral_Init( uint8 task_id )
   
   register_for_batt(lock_in_BLETaskId);
   app_batt_start_periodic_update_info();
-
- 
   app_motor_start_periodic_verify_state();//周期校验车位锁
+  
+  hal_watchdog_init(WATCHDOG_MODE,CLOCK_PERIOD_1000MS);
+  osal_start_timerEx(lock_in_BLETaskId,FEED_WATCH_DOG_EVT,FEED_WATCH_DOG_VALUE);
   // makes sure LEDs are off
   HalLedSet( (HAL_LED_1 | HAL_LED_2), HAL_LED_MODE_OFF );
   // Setup a delayed profile startup
@@ -533,6 +537,14 @@ uint16 lock_in_BLECentral_ProcessEvent( uint8 task_id, uint16 events )
     HalLedSet(HAL_LED_1,HAL_LED_MODE_BLINK);
     
     return ( events ^ LED1_PERIOD_FLASH_EVT );
+  }
+  
+   if ( events & FEED_WATCH_DOG_EVT )
+  {
+    osal_start_timerEx(lock_in_BLETaskId,FEED_WATCH_DOG_EVT,FEED_WATCH_DOG_VALUE);
+    
+    hal_feed_watchdog();   
+    return ( events ^ FEED_WATCH_DOG_EVT );
   }
   
   // Discard unknown events
