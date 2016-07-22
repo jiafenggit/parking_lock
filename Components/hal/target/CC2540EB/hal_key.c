@@ -243,10 +243,8 @@ uint8 halGetVoltageMonitorInput(uint8 chn )
    * Read the JOY_LEVEL analog value and map it to joy movement.
    */
   uint8 adc;
-  if(chn==SCAN_CAR_EXSIT_CHN)
-  adc = HalAdcRead (SCAN_CAR_EXSIT_CHN, HAL_ADC_RESOLUTION_7);
-  if(chn==BATT_MONITOR_CHN)
-  adc = HalAdcRead (BATT_MONITOR_CHN, HAL_ADC_RESOLUTION_7);
+  
+  adc = HalAdcRead (chn, HAL_ADC_RESOLUTION_7);
   return adc;
 }
 

@@ -23,10 +23,10 @@ uint8 net_src_mac[6]={0x00,0x0e,0xc6,0x44,0x55,0x66};
 uint8 net_src_port[2]={0x04,0x5e};//1118;{0x22,0xb8};//8888
 uint8 net_sub_mask[4]={255,255,255,0};
 uint8 net_gate_way[4]={192,168,1,1};
-uint8 net_dst_ip[4]={175,155,143,215};
+uint8 net_dst_ip[4]={114,55,94,244};
 uint8 net_dst_mac[6]={0xff,0xff,0xff,0xff,0xff,0xff};
-uint8 net_dst_port[2]={0x22,0xb9};//8889
-uint8 net_protocol=SRMODE_PROTOCOLTCP_POS;//SRMODE_PROTOCOLUDP_POS;//
+uint8 net_dst_port[2]={0x22,0x60};//8800
+uint8 net_protocol=SRMODE_PROTOCOLUDP_POS;//SRMODE_PROTOCOLTCP_POS
 uint8 net_retry_time[2]={0x20,0x00};//800ms
 uint8 net_retry_cnt[1]={4};//4次
 uint8 net_mtu[2]={0x05,0xB4};//1460
@@ -118,8 +118,10 @@ static void net_socket_status_change_callback(uint8 new_status)
   {
    app_write_string("\r\nnet socket udp!");
    osal_mem_cpy(ptr_net_buff,"hello,wkxboot! net udp init!",32);
-   while(socket_send_to(NET_SOCKET,net_dst_ip,net_dst_port,ptr_net_buff,32)!=SUCCESS);
-   app_write_string("\r\n发送hello,wkxboot! net udp init!");
+   //while(socket_send_to(NET_SOCKET,net_dst_ip,net_dst_port,ptr_net_buff,32)!=SUCCESS);
+   socket_send(NET_SOCKET,"直接使用udp",12);
+   socket_send(NET_SOCKET,"再次直接使用udp",16);
+   app_write_string("\r\n发送hello,wkxboot! net udp init!&other");
   }
   if(new_status==SOCKET_INIT)   
   {

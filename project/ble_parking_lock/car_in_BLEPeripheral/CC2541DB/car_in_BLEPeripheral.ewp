@@ -1369,6 +1369,7 @@
           <state>xPLUS_BROADCASTER</state>
           <state>xHAL_LCD=TRUE</state>
           <state>HAL_LED=TRUE</state>
+          <state>OSALMEM_METRICS=FALSE</state>
         </option>
         <option>
           <name>CCPreprocFile</name>
@@ -1559,6 +1560,8 @@
           <state>$PROJ_DIR$\..\..\Profiles\Roles</state>
           <state>$PROJ_DIR$\..\..\Profiles\SimpleProfile</state>
           <state>$PROJ_DIR$\..\..\Profiles\DevInfo</state>
+          <state>$PROJ_DIR$\..\..\..\..\Components\ble\controller\CC254x\include</state>
+          <state>$PROJ_DIR$\..\..\Profiles\Roles\CC254x</state>
         </option>
         <option>
           <name>CCStdIncCheck</name>
@@ -6626,6 +6629,9 @@
           <file>
             <name>$PROJ_DIR$\..\..\..\..\Components\hal\target\CC2540EB\hal_uart.c</name>
           </file>
+          <file>
+            <name>$PROJ_DIR$\..\..\..\..\Components\hal\target\CC2540EB\hal_watchdog.c</name>
+          </file>
         </group>
         <group>
           <name>Includes</name>
@@ -6759,6 +6765,9 @@
       <name>$PROJ_DIR$\..\..\Include\gattservapp.h</name>
     </file>
     <file>
+      <name>$PROJ_DIR$\..\..\Profiles\GATT\gattservapp_util.c</name>
+    </file>
+    <file>
       <name>$PROJ_DIR$\..\..\Profiles\OAD\oad.h</name>
       <excluded>
         <configuration>CC2541DK-MINI Keyfob</configuration>
@@ -6780,10 +6789,7 @@
       </excluded>
     </file>
     <file>
-      <name>$PROJ_DIR$\..\..\Profiles\Roles\peripheral.c</name>
-    </file>
-    <file>
-      <name>$PROJ_DIR$\..\..\Profiles\Roles\peripheral.h</name>
+      <name>$PROJ_DIR$\..\..\Profiles\Roles\CC254x\peripheral.c</name>
     </file>
     <file>
       <name>$PROJ_DIR$\..\..\Profiles\Roles\peripheralBroadcaster.c</name>

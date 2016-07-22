@@ -1,12 +1,12 @@
 /**************************************************************************************************
   Filename:       peripheralBroadcaster.c
-  Revised:        $Date: 2013-08-28 14:57:01 -0700 (Wed, 28 Aug 2013) $
-  Revision:       $Revision: 35156 $
+  Revised:        $Date: 2015-04-21 13:04:36 -0700 (Tue, 21 Apr 2015) $
+  Revision:       $Revision: 43473 $
 
   Description:    GAP Peripheral + Broadcaster Role
 
 
-  Copyright 2010 - 2013 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2010 - 2015 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -636,7 +636,7 @@ void GAPRole_Init( uint8 task_id )
   gapRole_state = GAPROLE_INIT;
   gapRole_ConnectionHandle = INVALID_CONNHANDLE;
 
-  GAP_RegisterForHCIMsgs( gapRole_TaskID );
+  GAP_RegisterForMsgs( gapRole_TaskID );
   
   // Initialize the Profile Advertising and Connection Parameters
   gapRole_profileRole = (GAP_PROFILE_PERIPHERAL | GAP_PROFILE_BROADCASTER);

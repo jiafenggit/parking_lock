@@ -6,7 +6,7 @@
   Description:    This file contains the buffer management definitions.
 
 
-  Copyright 2008 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2008 - 2015 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -53,6 +53,15 @@ extern "C"
  * CONSTANTS
  */
 
+/*
+ * Allocate a block of memory.
+ */
+#define BM_alloc                osal_bm_alloc
+  
+/*
+ * Free a block of memory.
+ */
+#define BM_free                 osal_bm_free
 
 /*********************************************************************
  * VARIABLES

@@ -1,7 +1,7 @@
 /**************************************************************************************************
   Filename:       OSAL_PwrMgr.h
-  Revised:        $Date: 2007-10-28 18:41:49 -0700 (Sun, 28 Oct 2007) $
-  Revision:       $Revision: 15799 $
+  Revised:        $Date: 2014-06-30 16:38:56 -0700 (Mon, 30 Jun 2014) $
+  Revision:       $Revision: 39297 $
 
   Description:    This file contains the OSAL Power Management API.
 
@@ -63,9 +63,11 @@ extern "C"
 typedef struct
 {
   uint16 pwrmgr_task_state;
+#if !defined USE_ICALL && !defined OSAL_PORT2TIRTOS
   uint16 pwrmgr_next_timeout;
   uint16 accumulated_sleep_time;
   uint8  pwrmgr_device;
+#endif /* !defined USE_ICALL && !defined OSAL_PORT2TIRTOS */
 } pwrmgr_attribute_t;
 
 /* With PWRMGR_ALWAYS_ON selection, there is no power savings and the

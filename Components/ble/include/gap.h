@@ -1,7 +1,7 @@
 /**
   @headerfile:    gap.h
-  $Date: 2013-08-26 15:11:57 -0700 (Mon, 26 Aug 2013) $
-  $Revision: 35113 $
+  $Date: 2015-04-21 13:04:36 -0700 (Tue, 21 Apr 2015) $
+  $Revision: 43473 $
 
   @mainpage BLE GAP API
 
@@ -35,7 +35,7 @@
   link or exchange keys for bonding.
   <BR><BR><BR><BR><BR><BR>
 
-  Copyright 2009 - 2013 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2009 - 2015 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -194,6 +194,7 @@ extern "C"
   #define TGAP_GATT_TESTCODE          100 //!< GATT TestCodes - puts GATT into a test mode (paramValue maintained by GATT)
   #define TGAP_ATT_TESTCODE           101 //!< ATT TestCodes - puts ATT into a test mode (paramValue maintained by ATT)
   #define TGAP_GGS_TESTCODE           102 //!< GGS TestCodes - puts GGS into a test mode (paramValue maintained by GGS)
+  #define TGAP_L2CAP_TESTCODE         103 //!< L2CAP TestCodes - puts L2CAP into a test mode (paramValue maintained by L2CAP)
 #endif
 
 /** @} End GAP_PARAMETER_ID_DEFINES */
@@ -274,7 +275,7 @@ extern "C"
 #define WL_USED       0x01    //!< White list is used and the advertiser's address in this command is not used.
 /** @} End GAP_WHITELIST_DEFINES */
 
-/** @defgroup GAP_ADTYPE_DEFINES GAP Advertisment Data Types
+/** @defgroup GAP_ADTYPE_DEFINES GAP Advertisement Data Types
  * These are the data type identifiers for the data tokens in the advertisement data field.
  * @{
  */
@@ -297,8 +298,18 @@ extern "C"
 #define GAP_ADTYPE_SIGNED_DATA                  0x13 //!< Signed Data field
 #define GAP_ADTYPE_SERVICES_LIST_16BIT          0x14 //!< Service Solicitation: list of 16-bit Service UUIDs
 #define GAP_ADTYPE_SERVICES_LIST_128BIT         0x15 //!< Service Solicitation: list of 128-bit Service UUIDs
-#define GAP_ADTYPE_SERVICE_DATA                 0x16 //!< Service Data
+#define GAP_ADTYPE_SERVICE_DATA                 0x16 //!< Service Data - 16-bit UUID
+#define GAP_ADTYPE_PUBLIC_TARGET_ADDR           0x17 //!< Public Target Address
+#define GAP_ADTYPE_RANDOM_TARGET_ADDR           0x18 //!< Random Target Address
 #define GAP_ADTYPE_APPEARANCE                   0x19 //!< Appearance
+#define GAP_ADTYPE_ADV_INTERVAL                 0x1A //!< Advertising Interval
+#define GAP_ADTYPE_LE_BD_ADDR                   0x1B //!< LE Bluetooth Device Address
+#define GAP_ADTYPE_LE_ROLE                      0x1C //!< LE Role
+#define GAP_ADTYPE_SIMPLE_PAIRING_HASHC_256     0x1D //!< Simple Pairing Hash C-256
+#define GAP_ADTYPE_SIMPLE_PAIRING_RANDR_256     0x1E //!< Simple Pairing Randomizer R-256
+#define GAP_ADTYPE_SERVICE_DATA_32BIT           0x20 //!< Service Data - 32-bit UUID
+#define GAP_ADTYPE_SERVICE_DATA_128BIT          0x21 //!< Service Data - 128-bit UUID
+#define GAP_ADTYPE_3D_INFO_DATA                 0x3D //!< 3D Information Data
 #define GAP_ADTYPE_MANUFACTURER_SPECIFIC        0xFF //!< Manufacturer Specific Data: first 2 octets contain the Company Identifier Code followed by the additional manufacturer specific data
 /** @} End GAP_ADTYPE_DEFINES */
 
@@ -496,7 +507,6 @@ typedef struct
 {
   osal_event_hdr_t  hdr; //!< GAP_MSG_EVENT and status
   uint8 opcode;          //!< GAP_MAKE_DISCOVERABLE_DONE_EVENT
-  uint16 interval;       //!< actual advertising interval selected by controller
 } gapMakeDiscoverableRspEvent_t;
 
 /**
@@ -562,6 +572,7 @@ typedef struct
   uint8 devAddrType;         //!< Device address type: @ref GAP_ADDR_TYPE_DEFINES
   uint8 devAddr[B_ADDR_LEN]; //!< Device address of link
   uint16 connectionHandle;   //!< Connection Handle from controller used to ref the device
+  uint8 connRole;            //!< Connection formed as Master or Slave
   uint16 connInterval;       //!< Connection Interval
   uint16 connLatency;        //!< Conenction Latency
   uint16 connTimeout;        //!< Connection Timeout
@@ -840,14 +851,14 @@ typedef struct
   extern bStatus_t GAP_ConfigDeviceAddr( uint8 addrType, uint8 *pStaticAddr );
 
   /**
-   * @brief       Register your task ID to receive extra (unwanted)
-   *              HCI status and complete events.
+   * @brief       Register your task ID to receive extra (unprocessed)
+   *              HCI status and complete, and Host events.
    *
    * @param       taskID - Default task ID to send events.
    *
    * @return      none
    */
-  extern void GAP_RegisterForHCIMsgs( uint8 taskID );
+  extern void GAP_RegisterForMsgs( uint8 taskID );
 
 /*-------------------------------------------------------------------
  * FUNCTIONS - Device Discovery
@@ -961,13 +972,14 @@ typedef struct
   extern bStatus_t GAP_TerminateLinkReq( uint8 taskID, uint16 connectionHandle, uint8 reason );
 
   /**
-   * @brief       Update the link parameters to a slave device.
+   * @brief       Update the link parameters to a Master or Slave device.
    *
    * @param       pParams - link update parameters
    *
    * @return      SUCCESS: started update link process,<BR
    *              INVALIDPARAMETER: one of the parameters were invalid,<BR>
    *              bleIncorrectMode: invalid profile role,<BR>
+   *              bleAlreadyInRequestedMode: already updating link parameters,<BR>
    *              bleNotConnected: not in a connection<BR>
    */
   extern bStatus_t GAP_UpdateLinkParamReq( gapUpdateLinkParamReq_t *pParams );
@@ -1148,6 +1160,17 @@ typedef struct
    * @return      SUCCESS or bleMemAllocError
    */
   extern bStatus_t GAP_PeriDevMgrInit( void );
+  
+ /**
+   * @internal
+   *
+   * @brief       Register the GAP Peripheral Connection processing functions.
+   *
+   * @param       none
+   *
+   * @return      none
+   */
+  extern void GAP_PeriConnRegister( void );
 
   /**
    * @internal

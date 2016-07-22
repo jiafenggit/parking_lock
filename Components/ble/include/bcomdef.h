@@ -2,13 +2,13 @@
   @headerfile:       bcomdef.h
 
   <!--
-  Revised:        $Date: 2012-11-27 14:14:39 -0800 (Tue, 27 Nov 2012) $
-  Revision:       $Revision: 32324 $
+  Revised:        $Date: 2015-03-17 12:16:01 -0700 (Tue, 17 Mar 2015) $
+  Revision:       $Revision: 43204 $
 
   Description:    Type definitions and macros for BLE stack.
 
 
-  Copyright 2009 - 2012 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2009 - 2015 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -78,7 +78,9 @@ extern "C"
   #elif ( HOST_CONFIG == BROADCASTER_CFG )
     #define CTRL_CONFIG   ADV_NCONN_CFG
   #else
-    #error "Build Configuration Error: Invalid Host Role!"
+    #if defined ( FLASH_ONLY_BUILD ) || defined ( FLASH_ROM_BUILD )
+      #error "Build Configuration Error: Invalid Host Role!"
+    #endif
   #endif
 #else
   // Controller Sanity Check: Stop build when no configuration is defined.
@@ -86,19 +88,23 @@ extern "C"
                                                     ADV_CONN_CFG  | \
                                                     SCAN_CFG      | \
                                                     INIT_CFG ) )
-    #error "Build Configuration Error: At least one Controller build component required!"
+    #if defined ( FLASH_ONLY_BUILD ) || defined ( FLASH_ROM_BUILD )
+      #error "Build Configuration Error: At least one Controller build component required!"
+    #endif
   #endif // no Controller build components defined
 #endif
 
-#if !defined ( MAX_NUM_LL_CONN )
-  #if ( CTRL_CONFIG & INIT_CFG )
-    #define MAX_NUM_LL_CONN                       3
-  #elif ( !( CTRL_CONFIG & INIT_CFG ) && ( CTRL_CONFIG & ADV_CONN_CFG ) )
-    #define MAX_NUM_LL_CONN                       1
-  #else // no connection needed
-    #define MAX_NUM_LL_CONN                       0
-  #endif // CTRL_CONFIG=INIT_CFG
-#endif // !MAX_NUM_LL_CONN
+#if defined(CC2540) || defined(CC2541) || defined(CC2541S)
+  #if !defined ( MAX_NUM_BLE_CONNS )
+    #if ( CTRL_CONFIG & INIT_CFG )
+      #define MAX_NUM_BLE_CONNS                       3
+    #elif ( !( CTRL_CONFIG & INIT_CFG ) && ( CTRL_CONFIG & ADV_CONN_CFG ) )
+      #define MAX_NUM_BLE_CONNS                       1
+    #else // no connection needed
+      #define MAX_NUM_BLE_CONNS                       0
+    #endif // CTRL_CONFIG=INIT_CFG
+  #endif // !MAX_NUM_BLE_CONNS
+#endif // CC2540 | CC2541 | CC2541S
 
 /** @defgroup BLE_COMMON_DEFINES BLE Common Defines
  * @{
@@ -143,6 +149,7 @@ extern "C"
 #define bleInvalidRange                 0x18  //!< A parameter is out of range
 #define bleLinkEncrypted                0x19  //!< The link is already encrypted
 #define bleProcedureComplete            0x1A  //!< The Procedure is completed
+#define bleInvalidMtuSize               0x1B  //!< MTU size is out of range
 
 // GAP Status Return Values - returned as bStatus_t
 #define bleGAPUserCanceled              0x30  //!< The user canceled the task
@@ -175,6 +182,11 @@ extern "C"
 // GATT Configuration NV Items - Range  0x70 - 0x79 - This must match the number of Bonding entries
 #define BLE_NVID_GATT_CFG_START         0x70  //!< Start of the GATT Configuration NV IDs
 #define BLE_NVID_GATT_CFG_END           0x79  //!< End of the GATT Configuration NV IDs
+
+// Customer NV Items - Range  0x80 - 0x8F - This must match the number of Bonding entries
+#define BLE_NVID_CUST_START             0x80  //!< Start of the Customer's NV IDs
+#define BLE_NVID_CUST_END               0x8F  //!< End of the Customer's NV IDs
+
 /** @} End BLE_NV_IDS */
 
 /*********************************************************************
@@ -208,6 +220,12 @@ extern "C"
 #define HCI_GAP_EVENT_EVENT                   0x91 //!< GAP Event message
 #define HCI_SMP_EVENT_EVENT                   0x92 //!< SMP Event message
 #define HCI_EXT_CMD_EVENT                     0x93 //!< HCI Extended Command Event message
+
+// ICall and Dispatch - Messages IDs (0x80 - 0x8F)
+#define ICALL_EVENT_EVENT                     0x80 //!< ICall Event message
+#define ICALL_CMD_EVENT                       0x81 //!< ICall Command Event message
+#define DISPATCH_CMD_EVENT                    0x82 //!< Dispatch Command Event message
+
 /** @} End BLE_MSG_IDS */
 
 /*********************************************************************

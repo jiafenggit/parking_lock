@@ -5,12 +5,12 @@
 
   Description:    This file contains the Callback Timer task(s). This module
                   provides 'callback' timers using the existing 'event' timers.
-                  In other words, the registered callback function is called 
+                  In other words, the registered callback function is called
                   instead of an OSAL event being sent to the owner of the timer
                   when it expires.
 
 
-  Copyright 2008-2009 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2008-2015 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -26,8 +26,8 @@
   its documentation for any purpose.
 
   YOU FURTHER ACKNOWLEDGE AND AGREE THAT THE SOFTWARE AND DOCUMENTATION ARE
-  PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED, 
-  INCLUDING WITHOUT LIMITATION, ANY WARRANTY OF MERCHANTABILITY, TITLE, 
+  PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS OR IMPLIED,
+  INCLUDING WITHOUT LIMITATION, ANY WARRANTY OF MERCHANTABILITY, TITLE,
   NON-INFRINGEMENT AND FITNESS FOR A PARTICULAR PURPOSE. IN NO EVENT SHALL
   TEXAS INSTRUMENTS OR ITS LICENSORS BE LIABLE OR OBLIGATED UNDER CONTRACT,
   NEGLIGENCE, STRICT LIABILITY, CONTRIBUTION, BREACH OF WARRANTY, OR OTHER
@@ -38,12 +38,13 @@
   (INCLUDING BUT NOT LIMITED TO ANY DEFENSE THEREOF), OR OTHER SIMILAR COSTS.
 
   Should you have any questions regarding your right to use this Software,
-  contact Texas Instruments Incorporated at www.TI.com. 
+  contact Texas Instruments Incorporated at www.TI.com.
 **************************************************************************************************/
 
 #include "OSAL.h"
 #include "OSAL_Tasks.h"
 
+#include "hal_mcu.h"
 #include "osal_cbtimer.h"
 
 /*********************************************************************
@@ -76,8 +77,8 @@
 // Callback Timer structure
 typedef struct
 {
-  pfnCbTimer_t pfnCbTimer; // callback function to be called when timer expires
-  uint8 *pData;            // data to be passed in to callback function
+  pfnCbTimer_t  pfnCbTimer; // callback function to be called when timer expires
+  uint8        *pData;      // data to be passed in to callback function
 } cbTimer_t;
 
 /*********************************************************************
@@ -106,9 +107,16 @@ uint16 baseTaskID = TASK_NO_TASK;
  * LOCAL FUNCTIONS
  */
 
+static Status_t cbTimerSetup( pfnCbTimer_t  pfnCbTimer,
+                              uint8        *pData,
+                              uint32        timeout,
+                              uint8        *pTimerId,
+                              uint8         reload );
+
 /*********************************************************************
  * API FUNCTIONS
  */
+
 
 /*********************************************************************
  * @fn          osal_CbTimerInit
@@ -131,6 +139,7 @@ void osal_CbTimerInit( uint8 taskId )
     osal_memset( cbTimers, 0, sizeof( cbTimers ) );
   }
 }
+
 
 /*********************************************************************
  * @fn          osal_CbTimerProcessEvent
@@ -155,7 +164,10 @@ uint16 osal_CbTimerProcessEvent( uint8 taskId, uint16 events )
   if ( events )
   {
     uint8 i;
-    uint16 event;
+    uint16 event = 0;
+    halIntState_t cs;
+
+    HAL_ENTER_CRITICAL_SECTION(cs);
 
     // Process event timers
     for ( i = 0; i < NUM_CBTIMERS_PER_TASK; i++ )
@@ -167,19 +179,30 @@ uint16 osal_CbTimerProcessEvent( uint8 taskId, uint16 events )
         // Found the first event
         event =  0x0001 << i;
 
-        // Timer expired, call the registered callback function
-        pTimer->pfnCbTimer( pTimer->pData );
+        // check there is a callback function to call
+        if ( pTimer->pfnCbTimer != NULL )
+        {
+          // Timer expired, call the registered callback function
+          pTimer->pfnCbTimer( pTimer->pData );
+        }
 
-        // Mark entry as free
-        pTimer->pfnCbTimer = NULL;
-        
-        // Null out data pointer
-        pTimer->pData = NULL;
-      
+        // check if the timer is still active
+        // Note: An active timer means the timer was started with reload!
+        if ( osal_get_timeoutEx( taskId, event ) == 0 )
+        {
+          // Mark entry as free
+          pTimer->pfnCbTimer = NULL;
+
+          // Null out data pointer
+          pTimer->pData = NULL;
+        }
+
         // We only process one event at a time
         break;
       }
     }
+
+    HAL_EXIT_CRITICAL_SECTION(cs);
 
     // return unprocessed events
     return ( events ^ event );
@@ -190,64 +213,80 @@ uint16 osal_CbTimerProcessEvent( uint8 taskId, uint16 events )
   return 0;
 }
 
+
 /*********************************************************************
  * @fn      osal_CbTimerStart
  *
- * @brief   This function is called to start a callback timer to expire 
+ * @brief   This function is called to start a callback timer to expire
  *          in n mSecs. When the timer expires, the registered callback
  *          function will be called.
  *
- * @param   pfnCbTimer - callback function to be called when timer expires
- * @param   pData - data to be passed in to callback function
- * @param   timeout - in milliseconds.
- * @param   pTimerId - will point to new timer Id (if not null)
+ * input parameters
+ *
+ * @param   pfnCbTimer - Callback function to be called when timer expires.
+ * @param   pData      - Data to be passed in to callback function.
+ * @param   timeout    - In milliseconds.
+ * @param   pTimerId   - Pointer to new timer Id or NULL.
+ *
+ * output parameters
+ *
+ * @param   pTimerId   - Pointer to new timer Id or NULL.
  *
  * @return  Success, or Failure.
  */
-Status_t osal_CbTimerStart( pfnCbTimer_t pfnCbTimer, uint8 *pData,  
-                           uint16 timeout, uint8 *pTimerId )
+Status_t osal_CbTimerStart( pfnCbTimer_t  pfnCbTimer,
+                            uint8        *pData,
+                            uint32        timeout,
+                            uint8        *pTimerId )
 {
-  uint8 i;
- 
-  // Validate input parameters
-  if ( pfnCbTimer == NULL )
-  {
-    return ( INVALIDPARAMETER );
-  }
-
-  // Look for an unused timer first
-  for ( i = 0; i < NUM_CBTIMERS; i++ )
-  {
-    if ( cbTimers[i].pfnCbTimer == NULL )
-    {
-      // Start the OSAL event timer first
-      if ( osal_start_timerEx( TASK_ID( i ), EVENT_ID( i ), timeout ) == SUCCESS )
-      {
-        // Set up the callback timer
-        cbTimers[i].pfnCbTimer = pfnCbTimer;
-        cbTimers[i].pData = pData;
-
-        if ( pTimerId != NULL )
-        {
-          // Caller is intreseted in the timer id
-          *pTimerId = i;
-        }
-
-        return ( SUCCESS );
-      }
-    }
-  }
-
-  // No timer available
-  return ( NO_TIMER_AVAIL );
+  return ( cbTimerSetup( pfnCbTimer,
+                         pData,
+                         timeout,
+                         pTimerId,
+                         FALSE ) );
 }
+
+
+/*********************************************************************
+ * @fn      osal_CbTimerReload
+ *
+ * @brief   This function is called to start a callback timer to expire
+ *          in n mSecs. When the timer expires, it will automatically
+ *          reload the timer, and the registered callback function will
+ *          be called.
+ *
+ * input parameters
+ *
+ * @param   pfnCbTimer - Callback function to be called when timer expires.
+ * @param   pData      - Data to be passed in to callback function.
+ * @param   timeout    - In milliseconds.
+ * @param   pTimerId   - Pointer to new timer Id or NULL.
+ *
+ * output parameters
+ *
+ * @param   pTimerId   - Pointer to new timer Id or NULL.
+ *
+ * @return  Success, or Failure.
+ */
+Status_t osal_CbTimerStartReload( pfnCbTimer_t  pfnCbTimer,
+                                  uint8        *pData,
+                                  uint32        timeout,
+                                  uint8        *pTimerId )
+{
+  return ( cbTimerSetup( pfnCbTimer,
+                         pData,
+                         timeout,
+                         pTimerId,
+                         TRUE ) );
+}
+
 
 /*********************************************************************
  * @fn      osal_CbTimerUpdate
  *
  * @brief   This function is called to update a message timer that has
  *          already been started. If SUCCESS, the function will update
- *          the timer's timeout value. If INVALIDPARAMETER, the timer 
+ *          the timer's timeout value. If INVALIDPARAMETER, the timer
  *          either doesn't exit.
  *
  * @param   timerId - identifier of the timer that is to be updated
@@ -255,8 +294,12 @@ Status_t osal_CbTimerStart( pfnCbTimer_t pfnCbTimer, uint8 *pData,
  *
  * @return  SUCCESS or INVALIDPARAMETER if timer not found
  */
-Status_t osal_CbTimerUpdate( uint8 timerId, uint16 timeout )
+Status_t osal_CbTimerUpdate( uint8 timerId, uint32 timeout )
 {
+  halIntState_t cs;
+
+  HAL_ENTER_CRITICAL_SECTION(cs);
+
   // Look for the existing timer
   if ( timerId < NUM_CBTIMERS )
   {
@@ -268,10 +311,14 @@ Status_t osal_CbTimerUpdate( uint8 timerId, uint16 timeout )
         // Timer exists; update it
         osal_start_timerEx( TASK_ID( timerId ), EVENT_ID( timerId ), timeout );
 
+        HAL_EXIT_CRITICAL_SECTION(cs);
+
         return (  SUCCESS );
       }
     }
   }
+
+  HAL_EXIT_CRITICAL_SECTION(cs);
 
   // Timer not found
   return ( INVALIDPARAMETER );
@@ -282,7 +329,7 @@ Status_t osal_CbTimerUpdate( uint8 timerId, uint16 timeout )
  * @fn      osal_CbTimerStop
  *
  * @brief   This function is called to stop a timer that has already been
- *          started. If SUCCESS, the function will cancel the timer. If 
+ *          started. If SUCCESS, the function will cancel the timer. If
  *          INVALIDPARAMETER, the timer doesn't exit.
  *
  * @param   timerId - identifier of the timer that is to be stopped
@@ -291,6 +338,10 @@ Status_t osal_CbTimerUpdate( uint8 timerId, uint16 timeout )
  */
 Status_t osal_CbTimerStop( uint8 timerId )
 {
+  halIntState_t cs;
+
+  HAL_ENTER_CRITICAL_SECTION(cs);
+
   // Look for the existing timer
   if ( timerId < NUM_CBTIMERS )
   {
@@ -305,12 +356,95 @@ Status_t osal_CbTimerStop( uint8 timerId )
       // Null out data pointer
       cbTimers[timerId].pData = NULL;
 
+      HAL_EXIT_CRITICAL_SECTION(cs);
+
       return ( SUCCESS );
     }
   }
 
+  HAL_EXIT_CRITICAL_SECTION(cs);
+
   // Timer not found
   return ( INVALIDPARAMETER );
+}
+
+/*
+** Local Functions
+*/
+
+/*********************************************************************
+ * @fn      cbTimerSetup
+ *
+ * @brief   This function is a common routine that can be used to start
+ *          or reload a callback timer to expire in n mSecs.
+ *
+ * input parameters
+ *
+ * @param   pfnCbTimer - Callback function to be called when timer expires.
+ * @param   pData      - Data to be passed in to callback function.
+ * @param   timeout    - In milliseconds.
+ * @param   pTimerId   - Pointer to new timer Id or NULL.
+ * @param   reload     - Indicate start (FALSE) or start reload (TRUE) timer.
+ *
+ * output parameters
+ *
+ * @param   pTimerId   - Pointer to new timer Id or NULL.
+ *
+ * @return  Success, or Failure.
+ */
+static Status_t cbTimerSetup( pfnCbTimer_t  pfnCbTimer,
+                              uint8        *pData,
+                              uint32        timeout,
+                              uint8        *pTimerId,
+                              uint8         reload )
+{
+  uint8 i;
+  halIntState_t cs;
+
+  HAL_ENTER_CRITICAL_SECTION(cs);
+
+  // Validate input parameters
+  if ( pfnCbTimer == NULL )
+  {
+    HAL_EXIT_CRITICAL_SECTION(cs);
+
+    return ( INVALIDPARAMETER );
+  }
+
+  // Look for an unused timer first
+  for ( i = 0; i < NUM_CBTIMERS; i++ )
+  {
+    if ( cbTimers[i].pfnCbTimer == NULL )
+    {
+      // Start the OSAL event timer first
+      if ( ( (reload==TRUE)          ?
+             osal_start_reload_timer :
+             osal_start_timerEx )( TASK_ID( i ), EVENT_ID( i ), timeout ) == SUCCESS )
+      {
+        // Set up the callback timer
+        // Note: An odd pointer will be used to indicate to the process event
+        //       handler that the timer was started with reload.
+        cbTimers[i].pfnCbTimer = pfnCbTimer; //(pfnCbTimer_t)((uint32)pfnCbTimer | reload);
+        cbTimers[i].pData      = pData;
+
+        // Check if the caller wants the timer Id
+        if ( pTimerId != NULL )
+        {
+          // Caller is intreseted in the timer id
+          *pTimerId = i;
+        }
+
+        HAL_EXIT_CRITICAL_SECTION(cs);
+
+        return ( SUCCESS );
+      }
+    }
+  }
+
+  HAL_EXIT_CRITICAL_SECTION(cs);
+
+  // No timer available
+  return ( NO_TIMER_AVAIL );
 }
 
 /****************************************************************************

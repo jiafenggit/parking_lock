@@ -77,7 +77,7 @@
 
 #include"app_uart_init.h"
 
-
+#include"hal_watchdog.h"
 #if HAL_BATT_CHECK >0
 #include"hal_batt.h"
 #endif
@@ -97,7 +97,7 @@
 #define SBP_PERIODIC_EVT_PERIOD                   5000
 
 // What is the advertising interval when device is discoverable (units of 625us, 160=100ms)
-#define DEFAULT_ADVERTISING_INTERVAL           800
+#define DEFAULT_ADVERTISING_INTERVAL              800
 
 // Limited discoverable mode advertises for 30.72s, and then stops
 // General discoverable mode advertises indefinitely
@@ -109,22 +109,22 @@
 #endif  // defined ( CC2540_MINIDK )
 
 // Minimum connection interval (units of 1.25ms, 80=100ms) if automatic parameter update request is enabled
-#define DEFAULT_DESIRED_MIN_CONN_INTERVAL     400
+#define DEFAULT_DESIRED_MIN_CONN_INTERVAL     800
 
 // Maximum connection interval (units of 1.25ms, 800=1000ms) if automatic parameter update request is enabled
-#define DEFAULT_DESIRED_MAX_CONN_INTERVAL     400
+#define DEFAULT_DESIRED_MAX_CONN_INTERVAL     800
 
 // Slave latency to use if automatic parameter update request is enabled
 #define DEFAULT_DESIRED_SLAVE_LATENCY         0
 
 // Supervision timeout value (units of 10ms, 1000=10s) if automatic parameter update request is enabled
-#define DEFAULT_DESIRED_CONN_TIMEOUT          250 //1000
+#define DEFAULT_DESIRED_CONN_TIMEOUT          300 
 
 // Whether to enable automatic parameter update request when a connection is formed
 #define DEFAULT_ENABLE_UPDATE_REQUEST         TRUE
 
 // Connection Pause Peripheral time value (in seconds)
-#define DEFAULT_CONN_PAUSE_PERIPHERAL         2
+#define DEFAULT_CONN_PAUSE_PERIPHERAL         6
 
 // Company Identifier: Texas Instruments Inc. (13)
 #define TI_COMPANY_ID                         0x000D
@@ -141,6 +141,10 @@
 #define  CAR_AUHTORITY_FLAG_ID                0x80 //存储汽车权限信息
 #define  CUR_CONNET_TARGET_LOCK_IN            0x11 //当前连接的是lockin
 #define  CUR_CONNET_TARGET_CONTROL            0x22 //当前连接的是control
+
+#define  LED1_PERIOD_FLASH_VALUE              2000//2s闪烁一次
+#define  FEED_WATCH_DOG_VALUE                 900 //900ms喂一次
+
 
 /*********************************************************************
  * TYPEDEFS
@@ -249,7 +253,7 @@ uint8 adv_filter=GAP_FILTER_POLICY_ALL;
  * LOCAL FUNCTIONS
  */
 static void own_addr_add_1_to_peer_addr(uint8 *p_own_addr,uint8* p_peer_addr);
-static void adv_inderct_addr_update();
+//static void adv_inderct_addr_update();
 static void start_info_init();
 static void simpleBLEPeripheral_ProcessOSALMsg( osal_event_hdr_t *pMsg );
 static void peripheralStateNotificationCB( gaprole_States_t newState );
@@ -477,7 +481,10 @@ void SimpleBLEPeripheral_Init( uint8 task_id )
   HCI_EXT_MapPmIoPortCmd( HCI_EXT_PM_IO_PORT_P0, HCI_EXT_PM_IO_PORT_PIN7 );
 
 #endif // defined ( DC_DC_P0_7 )
-
+  
+  
+  hal_watchdog_init(WATCHDOG_MODE,CLOCK_PERIOD_1000MS);
+  osal_start_timerEx(simpleBLEPeripheral_TaskID,FEED_WATCH_DOG_EVT,FEED_WATCH_DOG_VALUE);
   // Setup a delayed profile startup
   osal_set_event( simpleBLEPeripheral_TaskID, SBP_START_DEVICE_EVT );
 
@@ -520,7 +527,7 @@ static void start_info_init()
   SimpleProfile_SetParameter( PARAM_BLE_TIME_STAMP_CHAR, sizeof ( time_stamp_t ), &park_time );
 }
 
-
+/*
 static void adv_inderct_addr_update()
 {
   if(addr_update_flag)//如果已经是连接过的情况
@@ -550,6 +557,7 @@ static void adv_inderct_addr_update()
     app_write_string(bdAddr2Str(control_addr));
   }
 }
+*/
 /*********************************************************************
  * @fn      SimpleBLEPeripheral_ProcessEvent
  *
@@ -575,7 +583,23 @@ uint16 SimpleBLEPeripheral_ProcessEvent( uint8 task_id, uint16 events )
     if ( (pMsg = osal_msg_receive( simpleBLEPeripheral_TaskID )) != NULL )
     {
       simpleBLEPeripheral_ProcessOSALMsg( (osal_event_hdr_t *)pMsg );
-
+      
+#if (OSALMEM_METRICS)
+      
+    {
+    uint16 i;
+    i=osal_heap_mem_used();
+    app_write_string("\r\nmem used:");
+    app_write_string(uint16_to_string(i));   
+    i= osal_heap_block_cnt();
+    app_write_string("\r\nmem block:");
+    app_write_string(uint16_to_string(i));
+    i= osal_heap_block_free();
+    app_write_string("\r\nmem free:");
+    app_write_string(uint16_to_string(i));
+    }
+#endif
+    
       // Release the OSAL message
       VOID osal_msg_deallocate( pMsg );
     }
@@ -612,6 +636,23 @@ uint16 SimpleBLEPeripheral_ProcessEvent( uint8 task_id, uint16 events )
     return (events ^ SBP_PERIODIC_EVT);
   }
 
+    if ( events & LED1_PERIOD_FLASH_EVT )
+  {
+    osal_start_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT,LED1_PERIOD_FLASH_VALUE);
+    HalLedSet(HAL_LED_1,HAL_LED_MODE_BLINK);
+    
+    return ( events ^ LED1_PERIOD_FLASH_EVT );
+  }
+  
+   if ( events & FEED_WATCH_DOG_EVT )
+  {
+    osal_start_timerEx(simpleBLEPeripheral_TaskID,FEED_WATCH_DOG_EVT,FEED_WATCH_DOG_VALUE);
+    
+    hal_feed_watchdog();   
+    return ( events ^ FEED_WATCH_DOG_EVT );
+  }
+  
+  
   // Discard unknown events
   return 0;
 }
@@ -787,8 +828,8 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
         app_write_string( bdAddr2Str( ownAddress ));
         app_write_string("\r\n目标lock in地址为:");
         app_write_string( bdAddr2Str( lock_in_addr));
-        app_write_string("\r\n目标control地址为:");
-        app_write_string( bdAddr2Str( control_addr));
+        //app_write_string("\r\n目标control地址为:");
+        //app_write_string( bdAddr2Str( control_addr));
       
         //GAPRole_SetParameter(GAPROLE_ADV_DIRECT_ADDR,B_ADDR_LEN,control_addr);
         //GAPRole_SetParameter( GAPROLE_ADVERT_DATA, sizeof( advertData ), advertData );
@@ -803,7 +844,7 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
           HalLcdWriteString( "Advertising",  HAL_LCD_LINE_3 );
         #endif // (defined HAL_LCD) && (HAL_LCD == TRUE)
         */
-        app_write_string("\r\n开始定向广播...");
+        app_write_string("\r\n开始广播...");
         
       }
       break;
@@ -811,8 +852,10 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
     case GAPROLE_CONNECTED:
       {   
         app_write_string("\r\n设备已连接!");
-        addr_update_flag=TRUE;
-        uint8 adv_enabled_status = 0;
+        
+        osal_start_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT,LED1_PERIOD_FLASH_VALUE);//开始闪烁
+        //addr_update_flag=TRUE;
+        uint8 adv_enabled_status = FALSE;
         GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn off Advertising
         /*
         #if (defined HAL_LCD) && (HAL_LCD == TRUE)
@@ -850,8 +893,12 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
       {
         //uint8 adv_enabled_status = 0;
         //GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn off Advertising
-        app_write_string("\r\n广播暂停,地址切换后等待500ms重新开始广播!");
-        adv_inderct_addr_update();
+        app_write_string("\r\n链接被主动断开!");
+        app_write_string("\r\n准备重新广播!");
+        osal_stop_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT);//停止闪烁
+        uint8 adv_enabled_status = TRUE;
+        GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn off Advertising
+        //adv_inderct_addr_update();
         //HalLcdWriteString( "Disconnected",  HAL_LCD_LINE_3 );
         //app_write_string("\r\n关闭广播,开始切换地址:");
    
@@ -865,8 +912,12 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
 
     case GAPROLE_WAITING_AFTER_TIMEOUT:
       {
-        app_write_string("\r\n连接通信超时!");
+        app_write_string("\r\n连接通信超时!断开!");
         app_write_string("\r\n准备重新广播!");
+        osal_stop_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT);//停止闪烁
+        
+        uint8 adv_enabled_status = TRUE;
+        GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn off Advertising
         /*
         #if (defined HAL_LCD) && (HAL_LCD == TRUE)
           HalLcdWriteString( "Timed Out",  HAL_LCD_LINE_3 );

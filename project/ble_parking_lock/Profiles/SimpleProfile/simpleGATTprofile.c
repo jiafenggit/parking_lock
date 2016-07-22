@@ -355,10 +355,10 @@ static gattAttribute_t car_in_profile_service_attr_tbl[SERVAPP_NUM_ATTR_SUPPORTE
 /*********************************************************************
  * LOCAL FUNCTIONS
  */
-static uint8 simpleProfile_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr, 
-                            uint8 *pValue, uint8 *pLen, uint16 offset, uint8 maxLen );
+static bStatus_t  simpleProfile_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr, 
+                            uint8 *pValue, uint8 *pLen, uint16 offset, uint8 maxLen ,uint8 method  );
 static bStatus_t simpleProfile_WriteAttrCB( uint16 connHandle, gattAttribute_t *pAttr,
-                                 uint8 *pValue, uint8 len, uint16 offset );
+                                 uint8 *pValue, uint8 len, uint16 offset ,uint8 method );
 
 static void simpleProfile_HandleConnStatusCB( uint16 connHandle, uint8 changeType );
 
@@ -403,7 +403,7 @@ bStatus_t SimpleProfile_AddService( uint32 services )
   {
     // Register GATT attribute list and CBs with GATT Server App
     status = GATTServApp_RegisterService( car_in_profile_service_attr_tbl, 
-                                          GATT_NUM_ATTRS( car_in_profile_service_attr_tbl ),
+                                          GATT_NUM_ATTRS( car_in_profile_service_attr_tbl ),GATT_MAX_ENCRYPT_KEY_SIZE,
                                           &simpleProfileCBs );
   }
 
@@ -589,8 +589,8 @@ bStatus_t SimpleProfile_GetParameter( uint8 param, void *value )
  *
  * @return      Success or Failure
  */
-static uint8 simpleProfile_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr, 
-                            uint8 *pValue, uint8 *pLen, uint16 offset, uint8 maxLen )
+static bStatus_t  simpleProfile_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr, 
+                            uint8 *pValue, uint8 *pLen, uint16 offset, uint8 maxLen ,uint8 method )
 {
   bStatus_t status = SUCCESS;
 
@@ -670,7 +670,7 @@ static uint8 simpleProfile_ReadAttrCB( uint16 connHandle, gattAttribute_t *pAttr
  * @return  Success or Failure
  */
 static bStatus_t simpleProfile_WriteAttrCB( uint16 connHandle, gattAttribute_t *pAttr,
-                                 uint8 *pValue, uint8 len, uint16 offset )
+                                 uint8 *pValue, uint8 len, uint16 offset,uint8 method  )
 {
   bStatus_t status = SUCCESS;
   uint8 notifyApp = 0xFF;

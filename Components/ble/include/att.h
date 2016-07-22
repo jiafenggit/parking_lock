@@ -2,14 +2,14 @@
   @headerfile:    att.h
 
   <!--
-  Revised:        $Date: 2013-05-01 13:58:23 -0700 (Wed, 01 May 2013) $
-  Revision:       $Revision: 34101 $
+  Revised:        $Date: 2015-04-21 13:04:36 -0700 (Tue, 21 Apr 2015) $
+  Revision:       $Revision: 43473 $
 
   Description:    This file contains Attribute Protocol (ATT) definitions
                   and prototypes.
 
 
-  Copyright 2009-2013 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2009-2015 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -104,6 +104,14 @@ extern "C"
 
 /** @} End ATT_METHOD_DEFINES */
 
+/** @defgroup ATT_MSG_EVENT_DEFINES ATT Message Event IDs
+ * @{
+ */
+#define ATT_FLOW_CTRL_VIOLATED_EVENT    0x7E //!< Sent when ATT flow control is violated on a connection.  This event is sent as an OSAL message defined as attFlowCtrlViolatedEvt_t.
+#define ATT_MTU_UPDATED_EVENT           0x7F //!< Sent when MTU is updated for a connection.  This event is sent as an OSAL message defined as attMtuUpdatedEvt_t.
+
+/** @} End ATT_MSG_EVENT_DEFINES */
+  
 /*** Opcode fields: bitmasks ***/
 // Method (bits 5-0)
 #define ATT_METHOD_BITS                  0x3f
@@ -170,25 +178,10 @@ extern "C"
   
   // Handle and 128-bit UUID
 #define ATT_HANDLE_UUID_TYPE             0x02
-  
-// Maximum number of handle and 16-bit UUID pairs in a single Find Info Response
-#define ATT_MAX_NUM_HANDLE_BT_UUID       ( ( ATT_MTU_SIZE - 2 ) / ( 2 + ATT_BT_UUID_SIZE ) )
-
-// Maximum number of handle and 128-bit UUID pairs in a single Find Info Response
-#define ATT_MAX_NUM_HANDLE_UUID          ( ( ATT_MTU_SIZE - 2 ) / ( 2 + ATT_UUID_SIZE ) )
-
-/*********************************************************************
- * Find By Type Value Response: Handles Infomation (Found Attribute Handle and Group End Handle)
- */
-  // Maximum number of handles info in a single Find By Type Value Response
-#define ATT_MAX_NUM_HANDLES_INFO         ( ( ATT_MTU_SIZE - 1 ) / 4 )
 
 /*********************************************************************
  * Read Multiple Request: Handles
  */
-  // Maximum number of handles in a single Read Multiple Request
-#define ATT_MAX_NUM_HANDLES              ( ( ATT_MTU_SIZE - 1 ) / 2 )
-
   // Minimum number of handles in a single Read Multiple Request
 #define ATT_MIN_NUM_HANDLES              2
 
@@ -210,20 +203,123 @@ extern "C"
 /*********************************************************************
  * Size of mandatory fields of ATT requests
  */
+
+// Length of opcode field: Opcode (1)
+#define ATT_OPCODE_SIZE                        1
+
+// Length of Exchange MTU Request: client receive MTU size (2)
+#define ATT_EXCHANGE_MTU_REQ_SIZE              2
+
+// Length of Exchange MTU Response: server receive MTU size (2)
+#define ATT_EXCHANGE_MTU_RSP_SIZE              2
+
+// Length of Error Response: Command opcode in error (1) + Attribute handle in error (2) + Status code (1)
+#define ATT_ERROR_RSP_SIZE                     4  
+
+// Length of Find Information Request's fixed fields: First handle number (2) + Last handle number (2)
+#define ATT_FIND_INFO_REQ_FIXED_SIZE           4
+
+// Length of Find Information Response's fixed field: Format (1)
+#define ATT_FIND_INFO_RSP_FIXED_SIZE           1
+#define ATT_FIND_INFO_RSP_HDR_SIZE             ( ATT_OPCODE_SIZE + ATT_FIND_INFO_RSP_FIXED_SIZE )
+
+// Length of Find By Type Value Request's fixed fields: Start handle (2) + End handle (2) + Type (2)
+#define ATT_FIND_BY_TYPE_VALUE_REQ_FIXED_SIZE  6
+#define ATT_FIND_BY_TYPE_VALUE_REQ_HDR_SIZE    ( ATT_OPCODE_SIZE + ATT_FIND_BY_TYPE_VALUE_REQ_FIXED_SIZE )
+
 // Length of Read By Type Request's fixed fields: First handle number (2) + Last handle number (2)
-#define READ_BY_TYPE_REQ_FIXED_SIZE        4
+#define ATT_READ_BY_TYPE_REQ_FIXED_SIZE        4
+#define ATT_READ_BY_TYPE_REQ_HDR_SIZE          ( ATT_OPCODE_SIZE + ATT_READ_BY_TYPE_REQ_FIXED_SIZE )
+  
+// Length of Read By Type Response's fixed fields: Length (1)
+#define ATT_READ_BY_TYPE_RSP_FIXED_SIZE        1
+#define ATT_READ_BY_TYPE_RSP_HDR_SIZE          ( ATT_OPCODE_SIZE + ATT_READ_BY_TYPE_RSP_FIXED_SIZE )
+  
+// Length of Read Request: Attribute Handle (2)
+#define ATT_READ_REQ_SIZE                      2
 
-// Length of Prepare Write Request's fixed size: Attribute Handle (2) + Value Offset (2)
-#define PREPARE_WRITE_REQ_FIXED_SIZE       4
+// Length of Read By Type Response's fixed fields: Length (1)
+#define ATT_READ_BY_GRP_TYPE_RSP_FIXED_SIZE    1
+#define ATT_READ_BY_GRP_TYPE_RSP_HDR_SIZE      ( ATT_OPCODE_SIZE + ATT_READ_BY_GRP_TYPE_RSP_FIXED_SIZE )
+  
+// Length of Write Request's fixed field: Attribute Handle (2)
+#define ATT_WRITE_REQ_FIXED_SIZE               2
 
+// Length of Read Blob Request: Attribute Handle (2) + Value Offset (2)
+#define ATT_READ_BLOB_REQ_SIZE                 4
+
+// Length of Write Request's fixed field: Attribute Handle (2)
+#define ATT_WRITE_REQ_FIXED_SIZE               2
+#define ATT_WRITE_REQ_HDR_SIZE                 ( ATT_OPCODE_SIZE + ATT_WRITE_REQ_FIXED_SIZE )
+
+// Length of Prepare Write Request's fixed fields: Attribute Handle (2) + Value Offset (2)
+#define ATT_PREPARE_WRITE_REQ_FIXED_SIZE       4
+#define ATT_PREPARE_WRITE_REQ_HDR_SIZE         ( ATT_OPCODE_SIZE + ATT_PREPARE_WRITE_REQ_FIXED_SIZE )
+  
+// Length of Prepare Write Response's fixed size: Attribute Handle (2) + Value Offset (2)
+#define ATT_PREPARE_WRITE_RSP_FIXED_SIZE       4
+
+// Length of Execute Write Request: Flags (1)
+#define ATT_EXECUTE_WRITE_REQ_SIZE             1
+
+// Length of Handle Value Indication's fixed size: Attribute Handle (2)
+#define ATT_HANDLE_VALUE_IND_FIXED_SIZE        2
+#define ATT_HANDLE_VALUE_IND_HDR_SIZE          ( ATT_OPCODE_SIZE + ATT_HANDLE_VALUE_IND_FIXED_SIZE )
+  
+// Length of Authentication Signature field
+#define ATT_AUTHEN_SIG_LEN                     12
+  
 /*********************************************************************
  * VARIABLES
  */
+
 extern CONST uint8 btBaseUUID[ATT_UUID_SIZE];
 
 /*********************************************************************
  * MACROS
  */
+
+#define ATT_WRITE_COMMAND( method, cmd ) ( ( (method) == ATT_WRITE_REQ ) && ( (cmd) == TRUE ) )
+
+/*********************************************************************
+ * ATT Find Info Response macros
+ */
+// Handle and 16-bit Bluetooth UUID pair indexes
+#define ATT_BT_PAIR_HANDLE_IDX( i )        ( (i) * (2 + ATT_BT_UUID_SIZE) )
+#define ATT_BT_PAIR_UUID_IDX( i )          ( ATT_BT_PAIR_HANDLE_IDX( (i) ) + 2 )
+
+#define ATT_BT_PAIR_HANDLE( info, i )      ( BUILD_UINT16( (info)[ATT_BT_PAIR_HANDLE_IDX((i))], \
+                                                           (info)[ATT_BT_PAIR_HANDLE_IDX((i))+1] ) )
+#define ATT_BT_PAIR_UUID( info, i )        ( BUILD_UINT16( (info)[ATT_BT_PAIR_UUID_IDX((i))], \
+                                                           (info)[ATT_BT_PAIR_UUID_IDX((i))+1] ) )
+
+// Handle and 128-bit UUID pair indexes
+#define ATT_PAIR_HANDLE_IDX( i )           ( (i) * (2 + ATT_UUID_SIZE) )
+#define ATT_PAIR_UUID_IDX( i )             ( ATT_PAIR_HANDLE_IDX( (i) ) + 2 )
+
+#define ATT_PAIR_HANDLE( info, i )         ( BUILD_UINT16( (info)[ATT_PAIR_HANDLE_IDX((i))], \
+                                                           (info)[ATT_PAIR_HANDLE_IDX((i))+1] ) )
+
+/*********************************************************************
+ * ATT Find By Type Value Response macros
+ */
+// Attribute Handle and Group End Handle pair indexes
+#define ATT_ATTR_HANDLE_IDX( i )           ( (i) * (2 + 2) )
+#define ATT_GRP_END_HANDLE_IDX( i )        ( ATT_ATTR_HANDLE_IDX( (i) ) + 2 )
+
+#define ATT_ATTR_HANDLE( info, i )         ( BUILD_UINT16( (info)[ATT_ATTR_HANDLE_IDX((i))], \
+                                                           (info)[ATT_ATTR_HANDLE_IDX((i))+1] ) )
+#define ATT_GRP_END_HANDLE( info, i )      ( BUILD_UINT16( (info)[ATT_GRP_END_HANDLE_IDX((i))], \
+                                                           (info)[ATT_GRP_END_HANDLE_IDX((i))+1] ) )
+
+/*********************************************************************
+ * ATT Read Multiple Request macros
+ */
+// Attribute Handle index
+#define ATT_HANDLE_IDX( i )                ( (i) * 2 )
+
+#define ATT_HANDLE( handles, i )           ( BUILD_UINT16( (handles)[ATT_HANDLE_IDX((i))], \
+                                                           (handles)[ATT_HANDLE_IDX((i))+1] ) )
 
 /*********************************************************************
  * TYPEDEFS
@@ -313,22 +409,13 @@ typedef struct
 } attHandleUUID_t;
 
 /**
- * Info data format for Find Information Response (handle-UUID pair).
- */
-typedef union
-{
-  attHandleBtUUID_t btPair[ATT_MAX_NUM_HANDLE_BT_UUID]; //!< A list of 1 or more handles with their 16-bit Bluetooth UUIDs
-  attHandleUUID_t   pair[ATT_MAX_NUM_HANDLE_UUID];      //!< A list of 1 or more handles with their 128-bit UUIDs
-} attFindInfo_t;
-
-/**
  * Find Information Response format.
  */
 typedef struct
 {
-  uint8 numInfo;      //!< Number of attribute handle-UUID pairs found
-  uint8 format;       //!< Format of information data
-  attFindInfo_t info; //!< Information data whose format is determined by format field
+  uint8 numInfo; //!< Number of attribute handle-UUID pairs found
+  uint8 format;  //!< Format of information data
+  uint8 *pInfo;  //!< Information data whose format is determined by format field (4 to ATT_MTU_SIZE-2)
 } attFindInfoRsp_t;
 
 /**
@@ -336,11 +423,11 @@ typedef struct
  */
 typedef struct
 {
-  uint16 startHandle;          //!< First requested handle number (must be first field)
-  uint16 endHandle;            //!< Last requested handle number
-  attAttrBtType_t type;        //!< 2-octet UUID to find
-  uint8 len;                   //!< Length of value
-  uint8 value[ATT_MTU_SIZE-7]; //!< Attribute value to find
+  uint16 startHandle;   //!< First requested handle number (must be first field)
+  uint16 endHandle;     //!< Last requested handle number
+  attAttrBtType_t type; //!< 2-octet UUID to find
+  uint8 len;            //!< Length of value
+  uint8 *pValue;        //!< Attribute value to find (0 to ATT_MTU_SIZE-7)
 } attFindByTypeValueReq_t;
 
 /**
@@ -357,8 +444,8 @@ typedef struct
  */
 typedef struct
 {
-  uint8 numInfo;                                          //!< Number of handles information found
-  attHandlesInfo_t handlesInfo[ATT_MAX_NUM_HANDLES_INFO]; //!< List of 1 or more handles information
+  uint8 numInfo;       //!< Number of handles information found
+  uint8 *pHandlesInfo; //!< List of 1 or more handles information (4 to ATT_MTU_SIZE-1)
 } attFindByTypeValueRsp_t;
 
 /**
@@ -376,9 +463,9 @@ typedef struct
  */
 typedef struct
 {
-  uint8 numPairs;                 //!< Number of attribute handle-UUID pairs found
-  uint8 len;                      //!< Size of each attribute handle-value pair
-  uint8 dataList[ATT_MTU_SIZE-2]; //!< List of 1 or more attribute handle-value pairs
+  uint8 numPairs;   //!< Number of attribute handle-UUID pairs found
+  uint8 len;        //!< Size of each attribute handle-value pair
+  uint8 *pDataList; //!< List of 1 or more attribute handle-value pairs (2 to ATT_MTU_SIZE-2)
 } attReadByTypeRsp_t;
 
 /**
@@ -394,8 +481,8 @@ typedef struct
  */
 typedef struct
 {
-  uint8 len;                   //!< Length of value
-  uint8 value[ATT_MTU_SIZE-1]; //!< Value of the attribute with the handle given
+  uint8 len;     //!< Length of value
+  uint8 *pValue; //!< Value of the attribute with the handle given (0 to ATT_MTU_SIZE-1)
 } attReadRsp_t;
 
 /**
@@ -412,8 +499,8 @@ typedef struct
  */
 typedef struct
 {
-  uint8 len;                   //!< Length of value
-  uint8 value[ATT_MTU_SIZE-1]; //!< Part of the value of the attribute with the handle given
+  uint8 len;     //!< Length of value
+  uint8 *pValue; //!< Part of the value of the attribute with the handle given (0 to ATT_MTU_SIZE-1)
 } attReadBlobRsp_t;
 
 /**
@@ -421,8 +508,8 @@ typedef struct
  */
 typedef struct
 {
-  uint16 handle[ATT_MAX_NUM_HANDLES]; //!< Set of two or more attribute handles (must be first field)
-  uint8 numHandles;                   //!< Number of attribute handles
+  uint8 *pHandles;  //!< Set of two or more attribute handles (4 to ATT_MTU_SIZE-1) - must be first field
+  uint8 numHandles; //!< Number of attribute handles
 } attReadMultiReq_t;
 
 /**
@@ -430,8 +517,8 @@ typedef struct
  */
 typedef struct
 {
-  uint8 len;                    //!< Length of values
-  uint8 values[ATT_MTU_SIZE-1]; //!< Set of two or more values
+  uint8 len;      //!< Length of values
+  uint8 *pValues; //!< Set of two or more values (0 to ATT_MTU_SIZE-1)
 } attReadMultiRsp_t;
 
 /**
@@ -449,9 +536,9 @@ typedef struct
  */
 typedef struct
 {
-  uint8 numGrps;                  //!< Number of attribute handle, end group handle and value sets found
-  uint8 len;                      //!< Length of each attribute handle, end group handle and value set
-  uint8 dataList[ATT_MTU_SIZE-2]; //!< List of 1 or more attribute handle, end group handle and value
+  uint8 numGrps;    //!< Number of attribute handle, end group handle and value sets found
+  uint8 len;        //!< Length of each attribute handle, end group handle and value set
+  uint8 *pDataList; //!< List of 1 or more attribute handle, end group handle and value (4 to ATT_MTU_SIZE-2)
 } attReadByGrpTypeRsp_t;
 
 /**
@@ -459,11 +546,11 @@ typedef struct
  */
 typedef struct
 {
-  uint16 handle;               //!< Handle of the attribute to be written (must be first field)
-  uint8 len;                   //!< Length of value
-  uint8 value[ATT_MTU_SIZE-3]; //!< Value of the attribute to be written
-  uint8 sig;                   //!< Authentication Signature status (not included (0), valid (1), invalid (2))
-  uint8 cmd;                   //!< Command Flag
+  uint16 handle; //!< Handle of the attribute to be written (must be first field)
+  uint8 len;     //!< Length of value
+  uint8 *pValue; //!< Value of the attribute to be written (0 to ATT_MTU_SIZE-3)
+  uint8 sig;     //!< Authentication Signature status (not included (0), valid (1), invalid (2))
+  uint8 cmd;     //!< Command Flag
 } attWriteReq_t;
 
 /**
@@ -471,10 +558,10 @@ typedef struct
  */
 typedef struct
 {
-  uint16 handle;               //!< Handle of the attribute to be written (must be first field)
-  uint16 offset;               //!< Offset of the first octet to be written
-  uint8 len;                   //!< Length of value
-  uint8 value[ATT_MTU_SIZE-5]; //!< Part of the value of the attribute to be written
+  uint16 handle; //!< Handle of the attribute to be written (must be first field)
+  uint16 offset; //!< Offset of the first octet to be written
+  uint8 len;     //!< Length of value
+  uint8 *pValue; //!< Part of the value of the attribute to be written (0 to ATT_MTU_SIZE-5) - must be allocated
 } attPrepareWriteReq_t;
 
 /**
@@ -482,10 +569,10 @@ typedef struct
  */
 typedef struct
 {
-  uint16 handle;               //!< Handle of the attribute that has been read
-  uint16 offset;               //!< Offset of the first octet to be written
-  uint8 len;                   //!< Length of value
-  uint8 value[ATT_MTU_SIZE-5]; //!< Part of the value of the attribute to be written
+  uint16 handle; //!< Handle of the attribute that has been read
+  uint16 offset; //!< Offset of the first octet to be written
+  uint8 len;     //!< Length of value
+  uint8 *pValue; //!< Part of the value of the attribute to be written (0 to ATT_MTU_SIZE-5)
 } attPrepareWriteRsp_t;
 
 /**
@@ -502,9 +589,9 @@ typedef struct
  */
 typedef struct
 {
-  uint16 handle;               //!< Handle of the attribute that has been changed (must be first field)
-  uint8 len;                   //!< Length of value
-  uint8 value[ATT_MTU_SIZE-3]; //!< New value of the attribute
+  uint16 handle; //!< Handle of the attribute that has been changed (must be first field)
+  uint8 len;     //!< Length of value
+  uint8 *pValue; //!< Current value of the attribute (0 to ATT_MTU_SIZE-3)
 } attHandleValueNoti_t;
 
 /**
@@ -512,21 +599,56 @@ typedef struct
  */
 typedef struct
 {
-  uint16 handle;               //!< Handle of the attribute that has been changed (must be first field)
-  uint8 len;                   //!< Length of value
-  uint8 value[ATT_MTU_SIZE-3]; //!< New value of the attribute
+  uint16 handle; //!< Handle of the attribute that has been changed (must be first field)
+  uint8 len;     //!< Length of value
+  uint8 *pValue; //!< Current value of the attribute (0 to ATT_MTU_SIZE-3)
 } attHandleValueInd_t;
 
 /**
- * ATT Message format. It's a union of all attribute protocol messages used 
- * between the attribute protocol and upper layer profile/application.
+ * The following two ATT events are generated locally (not received OTA) by 
+ * the ATT Server or Client.
+ */
+
+/**
+ * ATT Flow Control Violated Event message format.  This message is sent to the
+ * app by the local ATT Server or Client when a sequential ATT Request-Response
+ * or Indication-Confirmation protocol flow control is violated for a connection.
+ * All subsequent ATT Requests and Indications received by the local ATT Server
+ * and Client respectively will be dropped.
+ *
+ * This message is to inform the app (that has registered with GAP by calling 
+ * GAP_RegisterForMsgs()) in case it wants to drop the connection.
+ */
+typedef struct
+{
+  uint8 opcode;        //!< opcode of message that caused flow control violation
+  uint8 pendingOpcode; //!< opcode of pending message
+} attFlowCtrlViolatedEvt_t;
+
+/**
+ * ATT MTU Updated Event message format.  This message is sent to the app
+ * by the local ATT Server or Client when the ATT MTU size is updated for a
+ * connection. The default ATT MTU size is 23 octets.
+ *
+ * This message is to inform the app (that has registered with GAP by calling 
+ * GAP_RegisterForMsgs()) about the new ATT MTU size negotiated for a connection.
+ */
+typedef struct
+{
+  uint16 MTU; //!< new MTU size
+} attMtuUpdatedEvt_t;
+
+/**
+ * ATT Message format. It's a union of all attribute protocol messages and
+ * locally-generated events used between the attribute protocol and upper
+ * layer profile/application.
  */
 typedef union
 {
   // Request messages
   attExchangeMTUReq_t exchangeMTUReq;         //!< ATT Exchange MTU Request
   attFindInfoReq_t findInfoReq;               //!< ATT Find Information Request
-  attFindByTypeValueReq_t findByTypeValueReq; //!< ATT Find By Type Vaue Request
+  attFindByTypeValueReq_t findByTypeValueReq; //!< ATT Find By Type Value Request
   attReadByTypeReq_t readByTypeReq;           //!< ATT Read By Type Request
   attReadReq_t readReq;                       //!< ATT Read Request
   attReadBlobReq_t readBlobReq;               //!< ATT Read Blob Request
@@ -551,7 +673,14 @@ typedef union
   // Indication and Notification messages
   attHandleValueNoti_t handleValueNoti;       //!< ATT Handle Value Notification
   attHandleValueInd_t handleValueInd;         //!< ATT Handle Value Indication
+  
+  // Locally-generated event messages
+  attFlowCtrlViolatedEvt_t flowCtrlEvt;       //!< ATT Flow Control Violated Event
+  attMtuUpdatedEvt_t mtuEvt;                  //!< ATT MTU Updated Event
 } attMsg_t;
+
+// Function prototype to notify GATT Server or Client about an outgoing ATT message.
+typedef void (*attNotifyTxCB_t)( uint16 connHandle, uint8 opcode );
 
 /*********************************************************************
  * VARIABLES
@@ -1211,6 +1340,40 @@ extern bStatus_t ATT_HandleValueInd( uint16 connHandle, attHandleValueInd_t *pIn
  * @}
  */
 
+/*-------------------------------------------------------------------
+ *  Attribute Common Public APIs
+ */
+
+/**
+ * @defgroup ATT_COMMON_API ATT Server Common Functions
+ * 
+ * @{
+ */
+
+/**
+ * @brief   This function is used to update the MTU size of a connection.
+ *
+ * @param   connHandle - connection handle.
+ * @param   MTU - new MTU.
+ *
+ * @return  SUCCESS: MTU was updated successfully.<BR>
+ *          FAILURE: MTU wasn't updated.<BR>
+ */
+extern uint8 ATT_UpdateMTU( uint16 connHandle, uint16 MTU );
+
+/**
+ * @brief   This function is used to get the MTU size of a connection.
+ *
+ * @param   connHandle - connection handle.
+ *
+ * @return  connection MTU size.<BR>
+ */
+extern uint16 ATT_GetMTU( uint16 connHandle );
+
+/**
+ * @}
+ */
+
 /**
  * @brief   Set a ATT Parameter value.  Use this function to change 
  *          the default ATT parameter values.
@@ -1230,6 +1393,23 @@ extern void ATT_SetParamValue( uint16 value );
  */
 extern uint16 ATT_GetParamValue( void );
 
+/**
+ * @brief   Register the server's notify Tx function with the ATT layer.
+ *
+ * @param   pfnNotifyTx - pointer to notify Tx function
+ *
+ * @return  void
+ */
+extern void ATT_RegisterServer( attNotifyTxCB_t pfnNotifyTx );
+
+/**
+ * @brief   Register the client's notify Tx function with the ATT layer.
+ *
+ * @param   pfnNotifyTx - pointer to notify Tx function
+ *
+ * @return  void
+ */
+extern void ATT_RegisterClient( attNotifyTxCB_t pfnNotifyTx );
 
 /*********************************************************************
 *********************************************************************/

@@ -63,6 +63,8 @@
 #include"hal_scan_car.h"
 #include"hal_motor.h"
 #include"hal_batt.h"
+#include"hal_watchdog.h"
+
 
 
 /*********************************************************************
@@ -80,7 +82,7 @@
 #define DEFAULT_MAX_SCAN_RES                  8
 
 // Scan duration in ms
-#define DEFAULT_SCAN_DURATION                 6000
+#define DEFAULT_SCAN_DURATION                 500
 
 // Discovey mode (limited, general, all)
 #define DEFAULT_DISCOVERY_MODE               DEVDISC_MODE_ALL
@@ -104,16 +106,16 @@
 #define DEFAULT_ENABLE_UPDATE_REQUEST         TRUE
 
 // Minimum connection interval (units of 1.25ms) if automatic parameter update request is enabled
-#define DEFAULT_UPDATE_MIN_CONN_INTERVAL      400
+#define DEFAULT_UPDATE_MIN_CONN_INTERVAL      800
 
 // Maximum connection interval (units of 1.25ms) if automatic parameter update request is enabled
-#define DEFAULT_UPDATE_MAX_CONN_INTERVAL      400
+#define DEFAULT_UPDATE_MAX_CONN_INTERVAL      800
 
 // Slave latency to use if automatic parameter update request is enabled
 #define DEFAULT_UPDATE_SLAVE_LATENCY           0
 
 // Supervision timeout value (units of 10ms) if automatic parameter update request is enabled
-#define DEFAULT_UPDATE_CONN_TIMEOUT           250 //断开连接超时时间设置
+#define DEFAULT_UPDATE_CONN_TIMEOUT           300 //断开连接超时时间设置
 
 // Default passcode
 #define DEFAULT_PASSCODE                      19655
@@ -131,26 +133,32 @@
 #define DEFAULT_IO_CAPABILITIES               GAPBOND_IO_CAP_DISPLAY_ONLY
 
 // Default service discovery timer delay in ms
-#define DEFAULT_SVC_DISCOVERY_DELAY           1 //wkxboot 1000
+#define DEFAULT_SVC_DISCOVERY_DELAY           500 //wkxboot 1000
 
 // TRUE to filter discovery results on desired service UUID
 #define DEFAULT_DEV_DISC_BY_SVC_UUID          FALSE  //TRUE
 
 
-#define  DEFAULT_START_TO_SCAN_DELAY          1//wkxboot in ms
+#define  ATTEMPT_TO_EST_CONN_TIMEOUT_VALUE    2000
+   
+#define  DEFAULT_START_TO_SCAN_DELAY          500//wkxboot in ms
 #define  DEFAULT_GET_BAT_INFO_VALUE           5000//in ms
    
-#define  BAT_VOLTAGE_SCALE                    3 //1:3
-#define  BAT_FULL_VOLTAGE                     5.5  
+#define  BAT_VOLTAGE_SCALE                    4.7 //1:4.7
+#define  BAT_FULL_VOLTAGE                     5.8  
    
-#define  START_SCAN_CAR_ON_CONNECT            20000//20s on connect time
-#define  START_SCAN_CAR_ON_NORMAL             5000//5s  on connected time
+//#define  START_SCAN_CAR_ON_NORMAL           3000//3s  on connected time
 #define  START_SCAN_CAR_ON_EMERGENCY          666 //0.66s on emergenvy 
-#define  CAR_EXSIT_TRIGGER_VALUE              2 //2次没有检测到车辆就立起档杆
+#define  CAR_SIG_NO_EXSIT_TRIGGER_VALUE       15  //15次没有检测到信号就立起档杆
 
 
 #define  PARK_FLAG_ENTER                      1
 #define  PARK_FLAG_EXIT                       2
+   
+#define  LED1_PERIOD_FLASH_VALUE              2000//2s闪烁一次
+#define  FEED_WATCH_DOG_VALUE                 900 //900ms喂一次
+   
+
 // Application states
 enum
 {
@@ -250,7 +258,8 @@ static bool simpleBLEProcedureInProgress = FALSE;
 //discovery target ble addr
 uint8 ble_tar_addr[6];
 ble_device_t owner_info,echo_info;
-uint8 car_exsit_cnt=0;
+uint8 car_sig_exsit_cnt=0;
+bool  movable_arm_on_top=TRUE;
 
 ble_device_t lock_in_info,car_in_info;
 time_stamp_t time_stamp_info;
@@ -288,7 +297,7 @@ static void wkxboot_process_park_authority();
 
 static void lock_in_BLECentralProcessGATTMsg( gattMsgEvent_t *pMsg );
 static void lock_in_BLECentralRssiCB( uint16 connHandle, int8  rssi );
-static void lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent );
+static uint8 lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent );
 static void lock_in_BLECentralPasscodeCB( uint8 *deviceAddr, uint16 connectionHandle,
                                         uint8 uiInputs, uint8 uiOutputs );
 static void lock_in_BLECentralPairStateCB( uint16 connHandle, uint8 state, uint8 status );
@@ -349,10 +358,27 @@ void lock_in_BLECentral_Init( uint8 task_id )
   // Setup GAP
   GAP_SetParamValue( TGAP_GEN_DISC_SCAN, DEFAULT_SCAN_DURATION );
   GAP_SetParamValue( TGAP_LIM_DISC_SCAN, DEFAULT_SCAN_DURATION );
+
+
+ /*
   GAP_SetParamValue(TGAP_CONN_EST_INT_MIN,DEFAULT_UPDATE_MIN_CONN_INTERVAL);
   GAP_SetParamValue(TGAP_CONN_EST_INT_MAX,DEFAULT_UPDATE_MAX_CONN_INTERVAL);
   GAP_SetParamValue(TGAP_CONN_EST_LATENCY,DEFAULT_UPDATE_SLAVE_LATENCY);
+  */
+  
   GAP_SetParamValue( TGAP_CONN_EST_SUPERV_TIMEOUT,DEFAULT_UPDATE_CONN_TIMEOUT);
+  uint16 min_con,max_con,to,lat;
+
+  min_con= GAP_GetParamValue(TGAP_CONN_EST_INT_MIN);
+  max_con=GAP_GetParamValue(TGAP_CONN_EST_INT_MAX);
+  lat=GAP_GetParamValue(TGAP_CONN_EST_LATENCY);
+  to=GAP_GetParamValue( TGAP_CONN_EST_SUPERV_TIMEOUT);
+  
+ app_write_string("\r\n当前链接参数:");
+ app_write_string( uint16_to_string(min_con));
+ app_write_string( uint16_to_string(max_con));
+ app_write_string( uint16_to_string(lat));
+ app_write_string( uint16_to_string(to));
 
   GGS_SetParameter( GGS_DEVICE_NAME_ATT, GAP_DEVICE_NAME_LEN, (uint8 *) simpleBLEDeviceName );
 
@@ -388,9 +414,10 @@ void lock_in_BLECentral_Init( uint8 task_id )
   
   register_for_batt(lock_in_BLETaskId);
   app_batt_start_periodic_update_info();
-
- 
   app_motor_start_periodic_verify_state();//周期校验车位锁
+  
+  hal_watchdog_init(WATCHDOG_MODE,CLOCK_PERIOD_1000MS);
+  osal_start_timerEx(lock_in_BLETaskId,FEED_WATCH_DOG_EVT,FEED_WATCH_DOG_VALUE);
   // makes sure LEDs are off
   HalLedSet( (HAL_LED_1 | HAL_LED_2), HAL_LED_MODE_OFF );
   // Setup a delayed profile startup
@@ -423,7 +450,22 @@ uint16 lock_in_BLECentral_ProcessEvent( uint8 task_id, uint16 events )
     if ( (pMsg = osal_msg_receive( lock_in_BLETaskId )) != NULL )
     {
       lock_in_BLECentral_ProcessOSALMsg( (osal_event_hdr_t *)pMsg );
-
+      
+#if (OSALMEM_METRICS)
+    {
+    uint16 i;
+    i=osal_heap_mem_used();
+    app_write_string("\r\nmem used:");
+    app_write_string(uint16_to_string(i));   
+    i= osal_heap_block_cnt();
+    app_write_string("\r\nmem block:");
+    app_write_string(uint16_to_string(i));
+    i= osal_heap_block_free();
+    app_write_string("\r\nmem free:");
+    app_write_string(uint16_to_string(i));
+    }
+#endif
+    
       // Release the OSAL message
       VOID osal_msg_deallocate( pMsg );
     }
@@ -457,18 +499,52 @@ uint16 lock_in_BLECentral_ProcessEvent( uint8 task_id, uint16 events )
     return ( events ^ START_SCAN_EVT );
   }
 
+  if( events & ATTEMPT_TO_EST_CONN_TIMEOUT_EVT )
+  {
+    if(simpleBLEState == BLE_STATE_CONNECTING)//如果依然在等待连接 证明连接过程超时
+    {
+    app_write_string("\r\n试图建立连接过程超时!关闭est请求!");
+    GAPCentralRole_TerminateLink(GAP_CONNHANDLE_INIT);
+    }
+    
+    return ( events ^ ATTEMPT_TO_EST_CONN_TIMEOUT_EVT );
+  }
+  /*
   if ( events & START_SCAN_CAR_EXSIT_EVT )
   {
-    if(simpleBLEState != BLE_STATE_CONNECTED)//没有连接的情况下扫描车辆存在信息
+    if(simpleBLEState == BLE_STATE_IDLE)//在空闲情况下扫描车辆存在信息
+    {
     app_start_to_scan_car();
-    //osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT,START_SCAN_CAR_ON_NORMAL);//restart
+    }
+    else
+    {
+     app_write_string("\r\n当前非空闲状态,终止车辆扫描!");
+    }
+
     return ( events ^ START_SCAN_CAR_EXSIT_EVT );
   }
-    if ( events & START_SCAN_CAR_EMERGENCY_EVT )
+  */
+   if ( events & START_SCAN_CAR_EMERGENCY_EVT )
   {
     app_start_to_scan_car();
     osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EMERGENCY_EVT,START_SCAN_CAR_ON_EMERGENCY);//restart
     return ( events ^ START_SCAN_CAR_EMERGENCY_EVT );
+  }
+  
+   if ( events & LED1_PERIOD_FLASH_EVT )
+  {
+    osal_start_timerEx(lock_in_BLETaskId,LED1_PERIOD_FLASH_EVT,LED1_PERIOD_FLASH_VALUE);
+    HalLedSet(HAL_LED_1,HAL_LED_MODE_BLINK);
+    
+    return ( events ^ LED1_PERIOD_FLASH_EVT );
+  }
+  
+   if ( events & FEED_WATCH_DOG_EVT )
+  {
+    osal_start_timerEx(lock_in_BLETaskId,FEED_WATCH_DOG_EVT,FEED_WATCH_DOG_VALUE);
+    
+    hal_feed_watchdog();   
+    return ( events ^ FEED_WATCH_DOG_EVT );
   }
   
   // Discard unknown events
@@ -497,7 +573,7 @@ static void lock_in_BLECentral_ProcessOSALMsg( osal_event_hdr_t *pMsg )
   case SCAN_CAR_EVENT:    
       lock_in_BLECentral_handle_scan_car_event((scan_car_t*)pMsg);
       break;
-  case MOTOR_STATE_EVENT:    
+  case MOTOR_SIGNAL_EVENT:    
       lock_in_BLECentral_handle_motor_state_event((motor_msg_t*)pMsg);
       break;
   case UART_DEBUG_CMD:
@@ -559,10 +635,10 @@ static void lock_in_BLECentral_handle_uart_debug_cmd(uint8 dbg_cmd)
     app_write_string("\r\n开始扫描车辆...");
     break;
   case UART_DEBUG_CMD_START_POSITIVE_RUN:
-     app_motor_set_target_state_top();
+     app_movable_arm_set_target_90_90();
      break;
   case UART_DEBUG_CMD_START_NEGATIVE_RUN:
-     app_motor_set_target_state_bottom();
+     app_movable_arm_set_target_0_0();
      break;
   default:
     app_write_string("\r\ninvalid cmd!");
@@ -754,25 +830,32 @@ static void wkxboot_write_lock_in_info_in_peer()
         // Do a write
         attWriteReq_t req;
         
+       req.pValue = GATT_bm_alloc( simpleBLEConnHandle, ATT_WRITE_REQ, sizeof(ble_device_t), NULL );
+       if(req.pValue!= NULL)
+        {
         req.handle = BLE_lock_in_CharHdl;
         req.len = sizeof(ble_device_t);
-        *((ble_device_t*)req.value) = owner_info;
+        *((ble_device_t*)req.pValue) = owner_info;
         req.sig = 0;
         req.cmd = 0;
         status = GATT_WriteCharValue( simpleBLEConnHandle, &req, lock_in_BLETaskId );    
         app_write_string("\r\n开始写值!status:");
         app_write_string(uint8_to_string(status));
       
-      if ( status == SUCCESS )
-      {
+        if ( status == SUCCESS )
+        {
         simpleBLEProcedureInProgress = TRUE;
         cur_write_char_state=BLE_WRITE_STATE_LOCK_IN;
         app_write_string("\r\n写值进程返回正常!");
-      }
-      else
-      {
-        app_write_string("\r\n写值进程返回错误!");
-      }
+        }
+        else
+        {
+        GATT_bm_free( (gattMsg_t *)&req, ATT_WRITE_REQ );
+        cur_write_char_state=BLE_WRITE_STATE_IDLE;
+        app_write_string("\r\nlock in写值进程返回错误!准备断开连接...");
+        wkxboot_disconnect();
+        }
+        }
     }    
   } 
 }
@@ -791,10 +874,14 @@ static void wkxboot_write_time_stamp_info_in_peer()
       // Do a read or write as long as no other read or write is in progress
       if ( !simpleBLEProcedureInProgress )
       {
-       attWriteReq_t req;       
+       attWriteReq_t req;    
+       
+       req.pValue = GATT_bm_alloc( simpleBLEConnHandle, ATT_WRITE_REQ, sizeof(time_stamp_t), NULL );
+      if(req.pValue!= NULL)
+      {
        req.handle = BLE_time_stamp_CharHdl;
        req.len = sizeof(time_stamp_t);;
-       *((time_stamp_t*)req.value) = time_stamp_info;
+       *((time_stamp_t*)req.pValue) = time_stamp_info;
        req.sig = 0;
        req.cmd = 0;
        status = GATT_WriteCharValue( simpleBLEConnHandle, &req, lock_in_BLETaskId );    
@@ -809,9 +896,11 @@ static void wkxboot_write_time_stamp_info_in_peer()
       }
       else
       {
+        GATT_bm_free((gattMsg_t *)&req, ATT_WRITE_REQ );
         cur_write_char_state=BLE_WRITE_STATE_IDLE;
         app_write_string("\r\ntime stamp 写值进程返回错误!准备断开连接...");
         wkxboot_disconnect();
+      }
       }
     }
    else
@@ -819,7 +908,7 @@ static void wkxboot_write_time_stamp_info_in_peer()
      app_write_string("\r\ntime stamp simpleBLEProcedureInProgress is true!");
    }
   }
-    else
+  else
   {
    app_write_string("\r\ntime stamp 连接是断开的或者连接句柄为0无法写入!");
   }
@@ -832,7 +921,7 @@ static void wkxboot_process_park_authority()
   if(car_in_info.ble_active==CAR_HAS_PARKING_AUTHORITY)
   {   
    app_write_string("\r\n目标蓝牙有授权,可以停车!");
-   app_motor_set_target_state_bottom();//放下档杆  
+   app_movable_arm_set_target_0_0();//放下档杆  
   }
   else
   {
@@ -857,7 +946,9 @@ static void lock_in_BLECentral_HandleKeys( uint8 shift, uint8 keys )
 
  if ( keys & KEY_FUN1 )
   {
+    
     app_write_string("\r\n系统收到KEY_FUN1");
+    /*
     if ( simpleBLEState == BLE_STATE_CONNECTED &&
               BLE_lock_in_CharHdl != 0 &&
               simpleBLEProcedureInProgress == FALSE )
@@ -895,7 +986,8 @@ static void lock_in_BLECentral_HandleKeys( uint8 shift, uint8 keys )
         simpleBLEProcedureInProgress = TRUE;
         simpleBLEDoWrite = !simpleBLEDoWrite;
       }
-    }    
+    }  
+    */
   } 
   if ( keys & KEY_FUN2 )
   {
@@ -1025,7 +1117,18 @@ static void lock_in_BLECentralProcessGATTMsg( gattMsgEvent_t *pMsg )
          app_write_string("\r\nlock in写的值是:\r\n");
          uint8_array_to_string((uint8*)&lock_in_info,sizeof(ble_device_t));   
          app_write_string("\r\n回写数据完成!");
-
+    /*     
+    if ( simpleBLEState == BLE_STATE_CONNECTED )//更新参数
+    {
+    uint8 i= GAPCentralRole_UpdateLink( simpleBLEConnHandle,
+                                 DEFAULT_UPDATE_MIN_CONN_INTERVAL,
+                                 DEFAULT_UPDATE_MAX_CONN_INTERVAL,
+                                 DEFAULT_UPDATE_SLAVE_LATENCY,
+                                 DEFAULT_UPDATE_CONN_TIMEOUT );
+    app_write_string("\r\n返回结果:");
+    app_write_string(uint8_to_string(i));
+    }
+    */
       }
     }   
       
@@ -1035,36 +1138,43 @@ static void lock_in_BLECentralProcessGATTMsg( gattMsgEvent_t *pMsg )
     simpleBLEGATTDiscoveryEvent( pMsg );
   }
   
+  GATT_bm_free( &pMsg->msg, pMsg->method );
 }
 
 
 /*******wkxboot*********/
 static void lock_in_BLECentral_handle_motor_state_event(motor_msg_t* pMsg)
 {
-  app_write_string("\r\n系统收到马达状态信息!");
-  if(pMsg->state==MOTOR_ON_POSITIVE_RUN_STATE)
+  app_write_string("\r\n系统收到马达信号!");
+  
+  if(pMsg->state==SIGNAL_START_TO_SCAN_CAR)
   {
-    //app_write_string("\r\n暂停常状态车辆扫描!");
-    app_write_string("\r\n开启紧急状态车辆扫描!");
-    //osal_stop_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT);
-    osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EMERGENCY_EVT,START_SCAN_CAR_ON_EMERGENCY); 
+   osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EMERGENCY_EVT,START_SCAN_CAR_ON_EMERGENCY); 
+   app_write_string("\r\n开启紧急状态车辆扫描!");
   }
-  if(pMsg->state==MOTOR_ON_TOP_STATE || pMsg->state==MOTOR_ON_NEGATIVE_RUN_STATE)
+   if(pMsg->state==SIGNAL_STOP_TO_SCAN_CAR)
   {
-    app_write_string("\r\n关闭紧急状态车辆扫描!");   
     osal_stop_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EMERGENCY_EVT);
+    app_write_string("\r\n关闭紧急状态车辆扫描!");  
+  }
+   if(pMsg->state==SIGNAL_START_PERIODIC_VERIFY)
+  {
+    app_motor_start_periodic_verify_state();//开启校验位置
+  }
+    
+  if(pMsg->state==SIGNAL_STOP_PERIODIC_VERIFY)
+  {  
+   app_motor_stop_periodic_verify_state();//关闭校验位置 
+  }
+  if(pMsg->state==SIGNAL_MOVABLE_ARM_ON_TOP)
+  {  
+   movable_arm_on_top=TRUE;
+  }
+  if(pMsg->state==SIGNAL_MOVABLE_ARM_ON_BOTTOM)
+  {  
+   movable_arm_on_top=FALSE;
   }
  
-  if(pMsg->state==MOTOR_ON_BOTTOM_STATE)
-   {
-     app_write_string("\r\n系统收到档杆放下信息!");
-     
-    //app_write_string("\r\n开启常状态车辆扫描!"); 
-    //if(simpleBLEState == BLE_STATE_CONNECTED )//在刚建立连接的时候
-    //osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT,START_SCAN_CAR_ON_CONNECT);
-    //else
-    //osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT,START_SCAN_CAR_ON_NORMAL); 
-   }
 }
 
 
@@ -1072,43 +1182,20 @@ static void lock_in_BLECentral_handle_scan_car_event(scan_car_t* pMsg)
 {
   if(pMsg->state==CAR_EXSIT)
   {
-     app_write_string("\r\n系统收到有车信息!");   
-     //car_exsit_cnt=0;
-     app_motor_set_target_state_bottom();
+     app_write_string("\r\n系统收到有车信息!"); 
+     car_sig_exsit_cnt=0;
+     app_movable_arm_set_target_0_0();    
   }
    if(pMsg->state==CAR_NOT_EXSIT )
   {
-    app_write_string("\r\n系统收到无车信息!");
-    /*
-   if(simpleBLEState==BLE_STATE_IDLE)
-   {
-   car_exsit_cnt++;
- 
-   app_write_string("\r\n空闲状态,无车有效次数:");
-   app_write_string(uint8_to_string(car_exsit_cnt));
-   
-   if(car_exsit_cnt >=CAR_EXSIT_TRIGGER_VALUE)
-   {   
-   
-     app_write_string("\r\n准备断开连接&准备起杆!");
-
-     //car_exsit_cnt=0;
-     //if(simpleBLEState==BLE_STATE_CONNECTED)
-     //wkxboot_disconnect();
-     app_motor_set_target_state_top();
-     
-    }
-   }
-   else
-   {
-      app_write_string("\r\n非空闲状态,无车信息无效！");
-     
-    }
-    */
+    app_write_string("\r\n系统收到无车信息!");       
+    if((car_sig_exsit_cnt>=CAR_SIG_NO_EXSIT_TRIGGER_VALUE ))
+      {
+      app_write_string("\r\n无信号次数超限,起杆!");
+      car_sig_exsit_cnt=0;
+      app_movable_arm_set_target_90_90();      
+      }
     
-    app_write_string("\r\n准备断开连接&准备起杆!");
-    wkxboot_disconnect();
-    app_motor_set_target_state_top();
   }
 }
 
@@ -1221,19 +1308,21 @@ static void wkxboot_connect()
        {
          app_write_string("\r\n正在连接...");
          app_write_string(bdAddr2Str( peerAddr ));
-         //app_write_string("\r\n开始监视连接超时,超时值5秒!");       
+         
+         osal_start_timerEx(lock_in_BLETaskId,ATTEMPT_TO_EST_CONN_TIMEOUT_EVT,ATTEMPT_TO_EST_CONN_TIMEOUT_VALUE);//建立连接的过程超时
+         app_write_string("\r\n开始监视连接超时...");
+         
        }
        else
        {
          simpleBLEState =BLE_STATE_IDLE;
-         LL_CreateConnCancel();
+        // LL_CreateConnCancel();
          app_write_string("\r\n终止连接!连接过程出错!status:");
          app_write_string(uint8_to_string(rt_status));
          app_write_string("\r\n1秒钟后重新开始扫描!");
          osal_start_timerEx(lock_in_BLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);//1s
        }
-       
-       osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT,START_SCAN_CAR_ON_NORMAL);
+      
     }      
     else
     {
@@ -1291,7 +1380,7 @@ static void lock_in_BLECentralRssiCB( uint16 connHandle, int8 rssi )
  *
  * @return  none
  */
-static void lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
+static uint8 lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
 {
   switch ( pEvent->gap.opcode )
   {
@@ -1306,7 +1395,8 @@ static void lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         app_write_string("\r\n1秒钟后开始第一次扫描!");
         osal_start_timerEx(lock_in_BLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);//1s
         
-        app_motor_set_target_state_top();//init state档杆竖起
+        osal_start_timerEx(lock_in_BLETaskId,LED1_PERIOD_FLASH_EVT,LED1_PERIOD_FLASH_VALUE);//led1开始闪烁
+        app_movable_arm_set_target_90_90();//init state档杆竖起
       }
       break;
 
@@ -1322,11 +1412,9 @@ static void lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         
         if(ble_addr_is_match(pEvent->deviceInfo.addr,ble_tar_addr) && pEvent->deviceInfo.pEvtData[9]== CAR_HAS_PARKING_AUTHORITY)
         {
-          app_motor_set_target_state_bottom();//降下档杆
-          osal_stop_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT);
-          app_write_string("\r\n关闭平常车辆扫描!");
-          
-         // car_exsit_cnt=0;//不存在次数=0
+          app_movable_arm_set_target_0_0();//降下档杆
+        
+          car_sig_exsit_cnt=0;//存在次数=0
           //simpleBLEAddDeviceInfo( pEvent->deviceInfo.addr, pEvent->deviceInfo.addrType );        
           app_write_string("\r\n目标正确!");
           wkxboot_stop_discover();//关闭扫描
@@ -1356,6 +1444,8 @@ static void lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
       {
         // discovery complete
         simpleBLEScanning = FALSE;
+        
+        
        // osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT,START_SCAN_CAR_ON_NORMAL);//检测车辆信息
        /****wkxboot***/
         /*
@@ -1392,13 +1482,30 @@ static void lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         */
         
        app_write_string("\r\n完成一个扫描周期!");
-       osal_start_timerEx(lock_in_BLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);//1s
+       if(simpleBLEState == BLE_STATE_IDLE)//如果是空闲状态就开启扫描
+       {
+        osal_start_timerEx(lock_in_BLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);
+        if(!movable_arm_on_top)
+        {
+        car_sig_exsit_cnt++;
+        if(car_sig_exsit_cnt>=CAR_SIG_NO_EXSIT_TRIGGER_VALUE-1)//临界值扫描车辆
+        app_start_to_scan_car();
+        }
+        
+        app_write_string("\r\n空闲状态将继续扫描!");
+       }
+       else
+       {
+       app_write_string("\r\n非空闲状态不再扫描!");
+        }
        break;
       }
     case GAP_LINK_ESTABLISHED_EVENT:
       {
+        osal_stop_timerEx(lock_in_BLETaskId,ATTEMPT_TO_EST_CONN_TIMEOUT_EVT);//关闭连接过程超时定时器
+          
         if ( pEvent->gap.hdr.status == SUCCESS )
-        {          
+        {    
           simpleBLEState = BLE_STATE_CONNECTED;
           simpleBLEConnHandle = pEvent->linkCmpl.connectionHandle;
           simpleBLEProcedureInProgress = TRUE;    
@@ -1428,24 +1535,26 @@ static void lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         {
           simpleBLEState = BLE_STATE_IDLE;
           simpleBLEConnHandle = GAP_CONNHANDLE_INIT;
-          simpleBLERssi = FALSE;
+          //simpleBLERssi = FALSE;
           simpleBLEDiscState = BLE_DISC_STATE_IDLE;
  
           app_write_string("\r\n连接失败,status:");
           app_write_string(uint8_to_string(pEvent->gap.hdr.status));
-          app_write_string("\r\n1秒钟后重新开始扫描!");
-          osal_start_timerEx(lock_in_BLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);//1s
+          app_write_string("\r\n稍后重新开始扫描!");
           
-          osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT,START_SCAN_CAR_ON_NORMAL);
+          osal_start_timerEx(lock_in_BLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);
+           
         }
       }
       break;
 
     case GAP_LINK_TERMINATED_EVENT:
       {
+        osal_stop_timerEx(lock_in_BLETaskId,ATTEMPT_TO_EST_CONN_TIMEOUT_EVT);//关闭连接过程超时定时器
+          
         simpleBLEState = BLE_STATE_IDLE;
         simpleBLEConnHandle = GAP_CONNHANDLE_INIT;
-        simpleBLERssi = FALSE;
+        //simpleBLERssi = FALSE;
         simpleBLEDiscState = BLE_DISC_STATE_IDLE;
         BLE_lock_in_CharHdl = 0;
         simpleBLEProcedureInProgress = FALSE;
@@ -1454,10 +1563,8 @@ static void lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
         app_write_string(uint8_to_string(pEvent->linkTerminate.reason));          
 
         
-        app_write_string("\r\n1秒钟后重新开始扫描!");
-        osal_start_timerEx(lock_in_BLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);//1s
-        
-        osal_start_timerEx(lock_in_BLETaskId,START_SCAN_CAR_EXSIT_EVT,START_SCAN_CAR_ON_NORMAL);
+        app_write_string("\r\n一段时间后重新开始扫描!");
+        osal_start_timerEx(lock_in_BLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);
           
       }
       break;
@@ -1471,6 +1578,8 @@ static void lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
     default:
       break;
   }
+  
+  return (TRUE);
 }
 
 /*********************************************************************
@@ -1579,8 +1688,12 @@ static void simpleBLEGATTDiscoveryEvent( gattMsgEvent_t *pMsg )
       app_write_string("\r\nservice numInfo:");
       app_write_string(uint8_to_string(pMsg->msg.findByTypeValueRsp.numInfo));
       
-      simpleBLESvcStartHdl = pMsg->msg.findByTypeValueRsp.handlesInfo[0].handle;
-      simpleBLESvcEndHdl = pMsg->msg.findByTypeValueRsp.handlesInfo[0].grpEndHandle;
+      //simpleBLESvcStartHdl = pMsg->msg.findByTypeValueRsp.handlesInfo[0].handle;
+      //simpleBLESvcEndHdl = pMsg->msg.findByTypeValueRsp.handlesInfo[0].grpEndHandle;
+      
+      simpleBLESvcStartHdl = ATT_ATTR_HANDLE(pMsg->msg.findByTypeValueRsp.pHandlesInfo, 0);
+      simpleBLESvcEndHdl = ATT_GRP_END_HANDLE(pMsg->msg.findByTypeValueRsp.pHandlesInfo, 0);
+      
       app_write_string("\r\n发现的service开始handle:");
       app_write_string(uint16_to_string(simpleBLESvcStartHdl));
       app_write_string("\r\n发现的service结束handle:");
@@ -1621,10 +1734,10 @@ static void simpleBLEGATTDiscoveryEvent( gattMsgEvent_t *pMsg )
     {  
       if( pMsg->msg.readByTypeRsp.numPairs > 0 )
       {
-      BLE_lock_in_CharHdl = BUILD_UINT16( pMsg->msg.readByTypeRsp.dataList[0],
-                                          pMsg->msg.readByTypeRsp.dataList[1] );
+      BLE_lock_in_CharHdl = BUILD_UINT16( pMsg->msg.readByTypeRsp.pDataList[0],
+                                          pMsg->msg.readByTypeRsp.pDataList[1] );
       
-      lock_in_info = *((ble_device_t*)&pMsg->msg.readByTypeRsp.dataList[2]);//保存lock_in_info信息
+      lock_in_info = *((ble_device_t*)&pMsg->msg.readByTypeRsp.pDataList[2]);//保存lock_in_info信息
       
       app_write_string("\r\nlcok in numPairs:");
       app_write_string(uint8_to_string( pMsg->msg.readByTypeRsp.numPairs));
@@ -1666,10 +1779,10 @@ static void simpleBLEGATTDiscoveryEvent( gattMsgEvent_t *pMsg )
     {
       if(  pMsg->msg.readByTypeRsp.numPairs > 0 )
      {
-      BLE_car_in_CharHdl = BUILD_UINT16( pMsg->msg.readByTypeRsp.dataList[0],
-                                          pMsg->msg.readByTypeRsp.dataList[1] );    
+      BLE_car_in_CharHdl = BUILD_UINT16( pMsg->msg.readByTypeRsp.pDataList[0],
+                                          pMsg->msg.readByTypeRsp.pDataList[1] );    
       
-      car_in_info = *((ble_device_t*)&pMsg->msg.readByTypeRsp.dataList[2]);//保存car_in_info信息
+      car_in_info = *((ble_device_t*)&pMsg->msg.readByTypeRsp.pDataList[2]);//保存car_in_info信息
       
     //  wkxboot_process_park_authority();//处理授权信息
 
@@ -1709,10 +1822,10 @@ static void simpleBLEGATTDiscoveryEvent( gattMsgEvent_t *pMsg )
     { 
      if( pMsg->msg.readByTypeRsp.numPairs > 0 )
      {
-      BLE_time_stamp_CharHdl = BUILD_UINT16( pMsg->msg.readByTypeRsp.dataList[0],
-                                          pMsg->msg.readByTypeRsp.dataList[1] );
+      BLE_time_stamp_CharHdl = BUILD_UINT16( pMsg->msg.readByTypeRsp.pDataList[0],
+                                          pMsg->msg.readByTypeRsp.pDataList[1] );
       
-      time_stamp_info = *((time_stamp_t*)&pMsg->msg.readByTypeRsp.dataList[2]);
+      time_stamp_info = *((time_stamp_t*)&pMsg->msg.readByTypeRsp.pDataList[2]);
       
       app_write_string("\r\ntime stamp numPairs:");
       app_write_string(uint8_to_string( pMsg->msg.readByTypeRsp.numPairs));

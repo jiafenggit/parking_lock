@@ -6,7 +6,7 @@
   Description:    This file contains the types, contants, external functions
                   etc. for the BLE HCI Transport Layer.
 
-  Copyright 2009-2013 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2009-2015 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -76,7 +76,6 @@ extern uint8 hciSmpTaskID;
 #define HCI_TX_PROCESS_EVENT           0x0001
 #define HCI_TEST_UART_SEND_EVENT       0x0002
 #define HCI_BDADDR_UPDATED_EVENT       0x4000
-#define HCI_OSAL_MSG_EVENT             SYS_EVENT_MSG
 
 // OSAL Message Header Events
 #define HCI_CTRL_TO_HOST_EVENT         0x01
@@ -121,6 +120,31 @@ extern uint8 hciSmpTaskID;
 #define HCI_SCO_DATA_PACKET            0x03
 #define HCI_EVENT_PACKET               0x04
 
+
+// States for Command and Data packet parser
+#define HCI_PARSER_STATE_PKT_TYPE          0
+//
+#define HCI_CMD_PARSER_STATE_OPCODE        1
+#define HCI_CMD_PARSER_STATE_LENGTH        2
+#define HCI_CMD_PARSER_STATE_DATA          3
+//
+#define HCI_DATA_PARSER_STATE_HANDLE       4
+#define HCI_DATA_PARSER_STATE_LENGTH       5
+#define HCI_DATA_PARSER_STATE_DATA         6
+
+// HCI Command Subgroup
+#define HCI_OPCODE_CSG_LINK_LAYER          0
+#define HCI_OPCODE_CSG_CSG_L2CAP           1
+#define HCI_OPCODE_CSG_CSG_ATT             2
+#define HCI_OPCODE_CSG_CSG_GATT            3
+#define HCI_OPCODE_CSG_CSG_GAP             4
+#define HCI_OPCODE_CSG_CSG_SM              5
+#define HCI_OPCODE_CSG_CSG_Reserved        6
+#define HCI_OPCODE_CSG_CSG_USER_PROFILE    7
+
+// Vendor Specific OGF
+#define VENDOR_SPECIFIC_OGF                0x3F
+
 /*
 ** HCI Command Opcodes
 */
@@ -136,6 +160,9 @@ extern uint8 hciSmpTaskID;
 #define HCI_SET_CONTROLLER_TO_HOST_FLOW_CONTROL        0x0C31
 #define HCI_HOST_BUFFER_SIZE                           0x0C33
 #define HCI_HOST_NUM_COMPLETED_PACKETS                 0x0C35
+#define HCI_SET_EVENT_MASK_PAGE_2                      0x0C63
+#define HCI_READ_AUTH_PAYLOAD_TIMEOUT                  0x0C7B
+#define HCI_WRITE_AUTH_PAYLOAD_TIMEOUT                 0x0C7C
 
 // Information Parameters
 #define HCI_READ_LOCAL_VERSION_INFO                    0x1001
@@ -177,6 +204,8 @@ extern uint8 hciSmpTaskID;
 #define HCI_LE_RECEIVER_TEST                           0x201D
 #define HCI_LE_TRANSMITTER_TEST                        0x201E
 #define HCI_LE_TEST_END                                0x201F
+#define HCI_LE_REMOTE_CONN_PARAM_REQ_REPLY             0x2020
+#define HCI_LE_REMOTE_CONN_PARAM_REQ_NEG_REPLY         0x2021
 
 // LE Vendor Specific LL Extension Commands
 #define HCI_EXT_SET_RX_GAIN                            0xFC00
@@ -211,6 +240,9 @@ extern uint8 hciSmpTaskID;
 #define HCI_EXT_RESET_SYSTEM                           0xFC1D
 #define HCI_EXT_OVERLAPPED_PROCESSING                  0xFC1E
 #define HCI_EXT_NUM_COMPLETED_PKTS_LIMIT               0xFC1F
+#define HCI_EXT_GET_CONNECTION_INFO                    0xFC20
+#
+#define HCI_EXT_LL_TEST_MODE                           0xFC70
 
 /*
 ** HCI Event Codes
@@ -226,6 +258,7 @@ extern uint8 hciSmpTaskID;
 #define HCI_NUM_OF_COMPLETED_PACKETS_EVENT_CODE        0x13
 #define HCI_DATA_BUFFER_OVERFLOW_EVENT                 0x1A
 #define HCI_KEY_REFRESH_COMPLETE_EVENT_CODE            0x30
+#define HCI_APTO_EXPIRED_EVENT_CODE                    0x57
 
 // LE Event Code (for LE Meta Events)
 #define HCI_LE_EVENT_CODE                              0x3E
@@ -236,6 +269,7 @@ extern uint8 hciSmpTaskID;
 #define HCI_BLE_CONN_UPDATE_COMPLETE_EVENT             0x03
 #define HCI_BLE_READ_REMOTE_FEATURE_COMPLETE_EVENT     0x04
 #define HCI_BLE_LTK_REQUESTED_EVENT                    0x05
+#define HCI_BLE_REMOTE_CONN_PARAM_REQUEST_EVENT        0x06
 
 // Vendor Specific Event Code
 #define HCI_VE_EVENT_CODE                              0xFF
@@ -273,6 +307,9 @@ extern uint8 hciSmpTaskID;
 #define HCI_EXT_RESET_SYSTEM_EVENT                     0x041D
 #define HCI_EXT_OVERLAPPED_PROCESSING_EVENT            0x041E
 #define HCI_EXT_NUM_COMPLETED_PKTS_LIMIT_EVENT         0x041F
+#define HCI_EXT_GET_CONNECTION_INFO_EVENT              0x0420
+#
+#define HCI_EXT_LL_TEST_MODE_EVENT                     0x0470
 
 /*******************************************************************************
  * TYPEDEFS

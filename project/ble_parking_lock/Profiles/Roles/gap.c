@@ -1,12 +1,12 @@
 /*************************************************************************************************
   Filename:       gap.c
-  Revised:        $Date: 2013-05-06 13:33:47 -0700 (Mon, 06 May 2013) $
-  Revision:       $Revision: 34153 $
+  Revised:        $Date: 2015-01-22 12:55:26 -0800 (Thu, 22 Jan 2015) $
+  Revision:       $Revision: 41962 $
 
   Description:    This file contains the GAP Configuration API.
 
 
-  Copyright 2011 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2011 - 2015 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -149,6 +149,16 @@ bStatus_t GAP_DeviceInit(  uint8 taskID,
       #endif
       break;
 
+    #if defined(CTRL_V41_CONFIG) && (CTRL_V41_CONFIG & MST_SLV_CFG)
+    case (GAP_PROFILE_CENTRAL | GAP_PROFILE_PERIPHERAL):
+      #if ( HOST_CONFIG & ( CENTRAL_CFG | PERIPHERAL_CFG ) )
+      {
+        stat = SUCCESS;
+      }
+      #endif
+      break;
+    #endif // CTRL_V41_CONFIG = MST_SLV_CFG
+      
     // Invalid profile roles
     default:
       stat = INVALIDPARAMETER;
@@ -197,6 +207,9 @@ bStatus_t GAP_DeviceInit(  uint8 taskID,
 
         #if ( HOST_CONFIG & PERIPHERAL_CFG )
         {
+          // Register GAP Peripheral Connection processing functions
+          GAP_PeriConnRegister();
+          
           // Initialize SM Responder
           VOID SM_ResponderInit();
         }

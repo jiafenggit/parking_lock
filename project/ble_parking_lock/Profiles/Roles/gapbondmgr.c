@@ -6,7 +6,7 @@
   Description:    GAP peripheral profile manages bonded connections
 
 
-  Copyright 2011-2013 Texas Instruments Incorporated. All rights reserved.
+  Copyright 2011 - 2015 Texas Instruments Incorporated. All rights reserved.
 
   IMPORTANT: Your use of this Software is limited to those specific rights
   granted under the terms of a software license agreement between the user
@@ -39,6 +39,10 @@
 
 #if ( HOST_CONFIG & ( CENTRAL_CFG | PERIPHERAL_CFG ) )
 
+#if defined(GAP_BOND_MGR) && (defined(NO_OSAL_SNV) || (defined(OSAL_SNV) && (OSAL_SNV == 0)))
+  #error "Bond Manager cannot be used since NO_OSAL_SNV used! Disable in buildConfig.opt"
+#endif
+
 /*********************************************************************
  * INCLUDES
  */
@@ -64,6 +68,7 @@
 // Task event types
 #define GAP_BOND_SYNC_CC_EVT                            0x0001 // Sync char config
 #define GAP_BOND_SAVE_REC_EVT                           0x0002 // Save bond record in NV
+#define GAP_BOND_SAVE_RCA_EVT                           0x0004 // Save reconnection address in NV
 
 // Once NV usage reaches this percentage threshold, NV compaction gets triggered.
 #define NV_COMPACT_THRESHOLD                            80
@@ -207,10 +212,18 @@ static uint8 bondsToDelete[GAP_BONDINGS_MAX] = {FALSE};
 static uint8 bondIdx = GAP_BONDINGS_MAX;
 static gapAuthCompleteEvent_t *pAuthEvt = NULL;
 
+#if ( HOST_CONFIG & PERIPHERAL_CFG )
+
+#if defined (GAP_PRIVACY_RECONNECT)
+// Global used for saving reconnection address in NV
+static uint8 reconnectAddrIdx = GAP_BONDINGS_MAX;
+#endif // GAP_PRIVACY_RECONNECT
+
+#endif // PERIPHERAL_CFG
+
 /*********************************************************************
  * LOCAL FUNCTIONS
  */
-static uint8 gapBondMgrChangeState( uint8 idx, uint16 state, uint8 set );
 static uint8 gapBondMgrUpdateCharCfg( uint8 idx, uint16 attrHandle, uint16 value );
 static gapBondCharCfg_t *gapBondMgrFindCharCfgItem( uint16 attrHandle,
                                                     gapBondCharCfg_t *charCfgTbl );
@@ -227,7 +240,6 @@ static uint8 gapBondMgrBondTotal( void );
 static bStatus_t gapBondMgrEraseAllBondings( void );
 static bStatus_t gapBondMgrEraseBonding( uint8 idx );
 static uint8 gapBondMgr_ProcessOSALMsg( osal_event_hdr_t *pMsg );
-static void gapBondMgrSendServiceChange( linkDBItem_t *pLinkItem );
 static void gapBondMgr_ProcessGATTMsg( gattMsgEvent_t *pMsg );
 static void gapBondMgr_ProcessGATTServMsg( gattEventHdr_t *pMsg );
 static void gapBondSetupPrivFlag( void );
@@ -241,11 +253,34 @@ static void gapBondFreeAuthEvt( void );
 
 #if ( HOST_CONFIG & PERIPHERAL_CFG )
 static void gapBondMgrSlaveSecurityReq( uint16 connHandle );
-#endif
+
+#if defined (GAP_PRIVACY_RECONNECT)
+static uint8 gapBondMgrUpdateReconnectAddr( uint8 idx );
+static void gapBondMgrAttrValueChangeCB( uint16 connHandle, uint8 attrId );
+#endif // GAP_PRIVACY_RECONNECT
+
+#endif // PERIPHERAL_CFG
+
+#ifndef GATT_NO_SERVICE_CHANGED
+static uint8 gapBondMgrChangeState( uint8 idx, uint16 state, uint8 set );
+static void gapBondMgrSendServiceChange( linkDBItem_t *pLinkItem );
+#endif // GATT_NO_SERVICE_CHANGED
 
 /*********************************************************************
- * NETWORK LAYER CALLBACKS
+ * HOST CALLBACKS
  */
+
+#if ( HOST_CONFIG & PERIPHERAL_CFG )
+
+#if defined (GAP_PRIVACY_RECONNECT)
+// Bond Manager's callback
+static ggsAppCBs_t gapBondMgrCB =
+{
+  gapBondMgrAttrValueChangeCB
+};
+#endif // GAP_PRIVACY_RECONNECT
+
+#endif // PERIPHERAL_CFG
 
 /*********************************************************************
  * PUBLIC FUNCTIONS
@@ -637,9 +672,11 @@ bStatus_t GAPBondMgr_LinkEst( uint8 addrType, uint8 *pDevAddr, uint16 connHandle
     // Load the characteristic configuration
     if ( osal_snv_read( gattCfgNvID(idx), sizeof ( charCfg ), charCfg ) == SUCCESS )
     {
+      uint8 i;
+
       gapBondMgrInvertCharCfgItem( charCfg );
 
-      for ( uint8 i = 0; i < GAP_CHAR_CFG_MAX; i++ )
+      for ( i = 0; i < GAP_CHAR_CFG_MAX; i++ )
       {
         gapBondCharCfg_t *pItem = &(charCfg[i]);
 
@@ -652,11 +689,14 @@ bStatus_t GAPBondMgr_LinkEst( uint8 addrType, uint8 *pDevAddr, uint16 connHandle
       }
     }
 
+#ifndef GATT_NO_SERVICE_CHANGED
     // Has there been a service change?
     if ( stateFlags & GAP_BONDED_STATE_SERVICE_CHANGED )
     {
       VOID GATTServApp_SendServiceChangedInd( connHandle, gapBondMgr_TaskID );
     }
+#endif // GATT_NO_SERVICE_CHANGED
+
   }
 #if ( HOST_CONFIG & CENTRAL_CFG )
   else if ( role == GAP_PROFILE_CENTRAL &&
@@ -685,6 +725,86 @@ bStatus_t GAPBondMgr_LinkEst( uint8 addrType, uint8 *pDevAddr, uint16 connHandle
 
   return ( SUCCESS );
 }
+
+/*********************************************************************
+ * @brief   Notify the Bond Manager that a connection has been terminated.
+ *
+ * Public function defined in gapbondmgr.h.
+ */
+void GAPBondMgr_LinkTerm(uint16 connHandle)
+{
+  (void)connHandle;
+  
+  if ( GAP_NumActiveConnections() == 0 )
+  {
+    // See if we're asked to erase all bonding records
+    if ( eraseAllBonds == TRUE )
+    {
+      VOID gapBondMgrEraseAllBondings();
+      eraseAllBonds = FALSE;
+      
+      // Reset bonds to delete table
+      osal_memset( bondsToDelete, FALSE, sizeof( bondsToDelete ) );
+    }
+    else
+    {
+      // See if we're asked to erase any single bonding records
+      uint8 idx;
+      for (idx = 0; idx < GAP_BONDINGS_MAX; idx++)
+      {
+        if ( bondsToDelete[idx] == TRUE )
+        {
+          VOID gapBondMgrEraseBonding( idx );
+          bondsToDelete[idx] = FALSE;
+        }
+      }
+    }
+
+    // See if NV needs a compaction
+    VOID osal_snv_compact( NV_COMPACT_THRESHOLD );
+
+    // Make sure Bond RAM Shadow is up-to-date
+    gapBondMgrReadBonds();
+  }
+}
+
+#if ( HOST_CONFIG & CENTRAL_CFG )
+/*********************************************************************
+ * @brief   Notify the Bond Manager that a Slave Security Request is received.
+ *
+ * Public function defined in gapbondmgr.h.
+ */
+void GAPBondMgr_SlaveReqSecurity(uint16 connHandle)
+{
+  uint8 idx;
+  uint8 publicAddr[B_ADDR_LEN] = {0, 0, 0, 0, 0, 0};
+  linkDBItem_t *pLink = linkDB_Find( connHandle );
+
+  // If link found and not already initiating security
+  if (pLink != NULL && gapBond_PairingMode != GAPBOND_PAIRING_MODE_INITIATE)
+  {
+    // If already bonded initiate encryption
+    idx = GAPBondMgr_ResolveAddr( pLink->addrType, pLink->addr, publicAddr );
+    if ( idx < GAP_BONDINGS_MAX )
+    {
+      gapBondMgrBondReq( connHandle, idx, gapBondMgrGetStateFlags( idx ),
+                         GAP_PROFILE_CENTRAL, TRUE );
+    }
+    // Else if no pairing allowed
+    else if ( gapBond_PairingMode == GAPBOND_PAIRING_MODE_NO_PAIRING )
+    {
+      // Send error
+      VOID GAP_TerminateAuth( connHandle, SMP_PAIRING_FAILED_NOT_SUPPORTED );
+    }
+    // Else if waiting for request
+    else if (gapBond_PairingMode == GAPBOND_PAIRING_MODE_WAIT_FOR_REQ)
+    {
+      // Initiate pairing
+      gapBondMgrAuthenticate( connHandle, pLink->addrType, NULL );
+    }
+  }
+}
+#endif
 
 /*********************************************************************
  * @brief   Resolve an address from bonding information.
@@ -731,6 +851,7 @@ uint8 GAPBondMgr_ResolveAddr( uint8 addrType, uint8 *pDevAddr, uint8 *pResolvedA
   return ( idx );
 }
 
+#ifndef GATT_NO_SERVICE_CHANGED
 /*********************************************************************
  * @brief   Set/clear the service change indication in a bond record.
  *
@@ -789,6 +910,7 @@ bStatus_t GAPBondMgr_ServiceChangeInd( uint16 connectionHandle, uint8 setParam )
 
   return ( ret );
 }
+#endif // GATT_NO_SERVICE_CHANGED
 
 /*********************************************************************
  * @brief   Update the Characteristic Configuration in a bond record.
@@ -912,7 +1034,8 @@ uint8 GAPBondMgr_ProcessGAPMsg( gapEventHdr_t *pMsg )
     case GAP_AUTHENTICATION_COMPLETE_EVENT:
       {
         gapAuthCompleteEvent_t *pPkt = (gapAuthCompleteEvent_t *)pMsg;
-
+        uint8 saveStatus = SUCCESS;
+        
         // Should we save bonding information (one save at a time)
         if ( (pPkt->hdr.status == SUCCESS)             && 
              (pPkt->authState & SM_AUTH_STATE_BONDING) &&
@@ -952,12 +1075,21 @@ uint8 GAPBondMgr_ProcessGAPMsg( gapEventHdr_t *pMsg )
             // We're not done with this message; it will be freed later
             return ( FALSE );
           }
+          
+          // Couldn't save bonding information in NV -- it must be full!
+          saveStatus = bleNoResources;
         }
 
         // Call app state callback in the fail case. Success is handled after GAP_BOND_SAVE_REC_EVT.
         if ( pGapBondCB && pGapBondCB->pairStateCB )
         {
           pGapBondCB->pairStateCB( pPkt->connectionHandle, GAPBOND_PAIRING_STATE_COMPLETE, pPkt->hdr.status );
+          
+          if ( saveStatus != SUCCESS )
+          {
+            // Bonding record couldn't be saved in NV
+            pGapBondCB->pairStateCB( pPkt->connectionHandle, GAPBOND_PAIRING_STATE_BOND_SAVED, saveStatus );
+          }
         }
       }
       break;
@@ -1045,29 +1177,28 @@ uint8 GAPBondMgr_ProcessGAPMsg( gapEventHdr_t *pMsg )
         else
         {
           linkDBItem_t *pLinkItem = linkDB_Find( pPkt->connectionHandle );
-
+          if ( pLinkItem == NULL )
+          {
+            // Can't find the connection, ignore the message
+            break;
+          }
+          
           // Requesting bonding?
           if ( pPkt->pairReq.authReq & SM_AUTH_STATE_BONDING )
           {
-            if ( pLinkItem )
+            if ( (pLinkItem->addrType != ADDRTYPE_PUBLIC) && (pPkt->pairReq.keyDist.mIdKey == FALSE) )
             {
-              if ( (pLinkItem->addrType != ADDRTYPE_PUBLIC) && (pPkt->pairReq.keyDist.mIdKey == FALSE) )
-              {
-                uint8 publicAddr[B_ADDR_LEN];
+              uint8 publicAddr[B_ADDR_LEN];
 
-                // Check if we already have the public address in NV
-                if ( GAPBondMgr_ResolveAddr(pLinkItem->addrType, pLinkItem->addr, publicAddr ) == FALSE )
-                {
-                  // Can't bond to a non-public address if we don't know the public address
-                  VOID GAP_TerminateAuth( pPkt->connectionHandle, SMP_PAIRING_FAILED_AUTH_REQ );
-                  break;
-                }
+              // Check if we already have the public address in NV
+              if ( GAPBondMgr_ResolveAddr(pLinkItem->addrType, pLinkItem->addr, publicAddr ) == FALSE )
+              {
+                // Can't bond to a non-public address if we don't know the public address
+                VOID GAP_TerminateAuth( pPkt->connectionHandle, SMP_PAIRING_FAILED_AUTH_REQ );
+                
+                // Ignore the message
+                break;
               }
-            }
-            else
-            {
-              // Can't find the connection, ignore the message
-              break;
             }
           }
 
@@ -1088,67 +1219,17 @@ uint8 GAPBondMgr_ProcessGAPMsg( gapEventHdr_t *pMsg )
     case GAP_SLAVE_REQUESTED_SECURITY_EVENT:
       {
         uint16 connHandle = ((gapSlaveSecurityReqEvent_t *)pMsg)->connectionHandle;
-        uint8 idx;
-        uint8 publicAddr[B_ADDR_LEN] = {0, 0, 0, 0, 0, 0};
-        linkDBItem_t *pLink = linkDB_Find( connHandle );
-
-        // If link found and not already initiating security
-        if (pLink != NULL && gapBond_PairingMode != GAPBOND_PAIRING_MODE_INITIATE)
-        {
-          // If already bonded initiate encryption
-          idx = GAPBondMgr_ResolveAddr( pLink->addrType, pLink->addr, publicAddr );
-          if ( idx < GAP_BONDINGS_MAX )
-          {
-            gapBondMgrBondReq( connHandle, idx, gapBondMgrGetStateFlags( idx ),
-                               GAP_PROFILE_CENTRAL, TRUE );
-          }
-          // Else if no pairing allowed
-          else if ( gapBond_PairingMode == GAPBOND_PAIRING_MODE_NO_PAIRING )
-          {
-            // Send error
-            VOID GAP_TerminateAuth( connHandle, SMP_PAIRING_FAILED_NOT_SUPPORTED );
-          }
-          // Else if waiting for request
-          else if (gapBond_PairingMode == GAPBOND_PAIRING_MODE_WAIT_FOR_REQ)
-          {
-            // Initiate pairing
-            gapBondMgrAuthenticate( connHandle, pLink->addrType, NULL );
-          }
-        }
+        
+        GAPBondMgr_SlaveReqSecurity( connHandle );
       }
       break;
 #endif
 
     case GAP_LINK_TERMINATED_EVENT:
-      if ( GAP_NumActiveConnections() == 0 )
       {
-        // See if we're asked to erase all bonding records
-        if ( eraseAllBonds == TRUE )
-        {
-          VOID gapBondMgrEraseAllBondings();
-          eraseAllBonds = FALSE;
-          
-          // Reset bonds to delete table
-          osal_memset( bondsToDelete, FALSE, sizeof( bondsToDelete ) );
-        }
-        else
-        {
-          // See if we're asked to erase any single bonding records
-          for (uint8 idx = 0; idx < GAP_BONDINGS_MAX; idx++)
-          {
-            if ( bondsToDelete[idx] == TRUE )
-            {
-              VOID gapBondMgrEraseBonding( idx );
-              bondsToDelete[idx] = FALSE;
-            }
-          }
-        }
+        gapTerminateLinkEvent_t *pPkt = (gapTerminateLinkEvent_t *)pMsg;
 
-        // See if NV needs a compaction
-        VOID osal_snv_compact( NV_COMPACT_THRESHOLD );
-
-        // Make sure Bond RAM Shadow is up-to-date
-        gapBondMgrReadBonds();
+        GAPBondMgr_LinkTerm(pPkt->connectionHandle);
       }
       break;
 
@@ -1163,6 +1244,7 @@ uint8 GAPBondMgr_ProcessGAPMsg( gapEventHdr_t *pMsg )
  * LOCAL FUNCTION PROTOTYPES
  */
 
+#ifndef GATT_NO_SERVICE_CHANGED
 /*********************************************************************
  * @fn      gapBondMgrChangeState
  *
@@ -1198,10 +1280,13 @@ static uint8 gapBondMgrChangeState( uint8 idx, uint16 state, uint8 set )
       bondRec.stateFlags = stateFlags;
       VOID osal_snv_write( mainRecordNvID(idx), sizeof ( gapBondRec_t ), &bondRec );
     }
+    
     return ( TRUE );
   }
+  
   return ( FALSE );
 }
+#endif // GATT_NO_SERVICE_CHANGED
 
 /*********************************************************************
  * @fn      gapBondMgrUpdateCharCfg
@@ -1297,7 +1382,8 @@ static uint8 gapBondMgrUpdateCharCfg( uint8 idx, uint16 attrHandle, uint16 value
 static gapBondCharCfg_t *gapBondMgrFindCharCfgItem( uint16 attrHandle,
                                                     gapBondCharCfg_t *charCfgTbl )
 {
-  for ( uint8 i = 0; i < GAP_CHAR_CFG_MAX; i++ )
+  uint8 i;
+  for ( i = 0; i < GAP_CHAR_CFG_MAX; i++ )
   {
     if ( charCfgTbl[i].attrHandle == attrHandle )
     {
@@ -1319,7 +1405,8 @@ static gapBondCharCfg_t *gapBondMgrFindCharCfgItem( uint16 attrHandle,
  */
 static void gapBondMgrInvertCharCfgItem( gapBondCharCfg_t *charCfgTbl )
 {
-  for ( uint8 i = 0; i < GAP_CHAR_CFG_MAX; i++ )
+  uint8 i;
+  for ( i = 0; i < GAP_CHAR_CFG_MAX; i++ )
   {
     charCfgTbl[i].attrHandle = ~(charCfgTbl[i].attrHandle);
     charCfgTbl[i].value = ~(charCfgTbl[i].value);
@@ -1496,7 +1583,8 @@ static bStatus_t gapBondMgrGetPublicAddr( uint8 idx, uint8 *pAddr )
 static uint8 gapBondMgrFindReconnectAddr( uint8 *pReconnectAddr )
 {
   // Item doesn't exist, so create all the items
-  for ( uint8 idx = 0; idx < GAP_BONDINGS_MAX; idx++ )
+  uint8 idx;
+  for ( idx = 0; idx < GAP_BONDINGS_MAX; idx++ )
   {
     // compare reconnection address
     if ( osal_memcmp( bonds[idx].reconnectAddr, pReconnectAddr, B_ADDR_LEN ) )
@@ -1521,7 +1609,8 @@ static uint8 gapBondMgrFindReconnectAddr( uint8 *pReconnectAddr )
 static uint8 gapBondMgrFindAddr( uint8 *pDevAddr )
 {
   // Item doesn't exist, so create all the items
-  for ( uint8 idx = 0; idx < GAP_BONDINGS_MAX; idx++ )
+  uint8 idx;
+  for ( idx = 0; idx < GAP_BONDINGS_MAX; idx++ )
   {
     // Read in NV Main Bond Record and compare public address
     if ( osal_memcmp( bonds[idx].publicAddr, pDevAddr, B_ADDR_LEN ) )
@@ -1546,7 +1635,8 @@ static uint8 gapBondMgrFindAddr( uint8 *pDevAddr )
  */
 static uint8 gapBondMgrResolvePrivateAddr( uint8 *pDevAddr )
 {
-  for ( uint8 idx = 0; idx < GAP_BONDINGS_MAX; idx++ )
+  uint8 idx;
+  for ( idx = 0; idx < GAP_BONDINGS_MAX; idx++ )
   {
     uint8 IRK[KEYLEN];
 
@@ -1575,7 +1665,8 @@ static uint8 gapBondMgrResolvePrivateAddr( uint8 *pDevAddr )
  */
 static void gapBondMgrReadBonds( void )
 {
-  for ( uint8 idx = 0; idx < GAP_BONDINGS_MAX; idx++ )
+  uint8 idx;
+  for ( idx = 0; idx < GAP_BONDINGS_MAX; idx++ )
   {
     // See if the entry exists in NV
     if ( osal_snv_read( mainRecordNvID(idx), sizeof( gapBondRec_t ), &(bonds[idx]) ) != SUCCESS )
@@ -1609,7 +1700,8 @@ static void gapBondMgrReadBonds( void )
 static uint8 gapBondMgrFindEmpty( void )
 {
   // Item doesn't exist, so create all the items
-  for ( uint8 idx = 0; idx < GAP_BONDINGS_MAX; idx++ )
+  uint8 idx;
+  for ( idx = 0; idx < GAP_BONDINGS_MAX; idx++ )
   {
     // Look for public address of all 0xFF's
     if ( osal_isbufset( bonds[idx].publicAddr, 0xFF, B_ADDR_LEN ) )
@@ -1633,10 +1725,11 @@ static uint8 gapBondMgrFindEmpty( void )
  */
 static uint8 gapBondMgrBondTotal( void )
 {
+  uint8 idx;
   uint8 numBonds = 0;
 
   // Item doesn't exist, so create all the items
-  for ( uint8 idx = 0; idx < GAP_BONDINGS_MAX; idx++ )
+  for ( idx = 0; idx < GAP_BONDINGS_MAX; idx++ )
   {
     // Look for public address that are not 0xFF's
     if ( osal_isbufset( bonds[idx].publicAddr, 0xFF, B_ADDR_LEN ) == FALSE )
@@ -1660,10 +1753,11 @@ static uint8 gapBondMgrBondTotal( void )
  */
 static bStatus_t gapBondMgrEraseAllBondings( void )
 {
+  uint8 idx;
   bStatus_t stat = SUCCESS;  // return value
 
   // Item doesn't exist, so create all the items
-  for ( uint8 idx = 0; (idx < GAP_BONDINGS_MAX) && (stat == SUCCESS); idx++ )
+  for ( idx = 0; (idx < GAP_BONDINGS_MAX) && (stat == SUCCESS); idx++ )
   {
     // Erasing will write/create a bonding entry
     stat = gapBondMgrEraseBonding( idx );
@@ -1696,6 +1790,19 @@ static bStatus_t gapBondMgrEraseBonding( uint8 idx )
     gapBondFreeAuthEvt();
   }
   
+#if ( HOST_CONFIG & PERIPHERAL_CFG )
+
+#if defined (GAP_PRIVACY_RECONNECT)
+  if ( idx == reconnectAddrIdx )
+  {
+    osal_clear_event( gapBondMgr_TaskID, GAP_BOND_SAVE_RCA_EVT );
+    
+    reconnectAddrIdx = GAP_BONDINGS_MAX;
+  }
+#endif // GAP_PRIVACY_RECONNECT
+
+#endif // PERIPHERAL_CFG
+
   // First see if bonding record exists in NV, then write all 0xFF's to it
   if ( ( osal_snv_read( mainRecordNvID(idx), sizeof ( gapBondRec_t ), &bondRec ) == SUCCESS )
        && (osal_isbufset( bondRec.publicAddr, 0xFF, B_ADDR_LEN ) == FALSE) )
@@ -1738,6 +1845,14 @@ void GAPBondMgr_Init( uint8 task_id )
 
   // Setup Bond RAM Shadow
   gapBondMgrReadBonds();
+  
+#if ( HOST_CONFIG & PERIPHERAL_CFG )
+
+#if defined (GAP_PRIVACY_RECONNECT)
+  GGS_RegisterAppCBs( &gapBondMgrCB );
+#endif // GAP_PRIVACY_RECONNECT
+
+#endif // PERIPHERAL_CFG
 }
 
 /*********************************************************************
@@ -1777,7 +1892,9 @@ uint16 GAPBondMgr_ProcessEvent( uint8 task_id, uint16 events )
       return (events ^ GAP_BOND_SAVE_REC_EVT);
     }
 
-    return ( GAP_BOND_SAVE_REC_EVT );
+    osal_set_event( gapBondMgr_TaskID, GAP_BOND_SAVE_REC_EVT );
+    
+    return (events ^ GAP_BOND_SAVE_REC_EVT);
   }
   
   if ( events & GAP_BOND_SYNC_CC_EVT )
@@ -1790,6 +1907,9 @@ uint16 GAPBondMgr_ProcessEvent( uint8 task_id, uint16 events )
       {
         // Assume SUCCESS since we got this far.
         pGapBondCB->pairStateCB( pAuthEvt->connectionHandle, GAPBOND_PAIRING_STATE_COMPLETE, SUCCESS );
+        
+        // Bonding record was successfully saved in NV
+        pGapBondCB->pairStateCB( pAuthEvt->connectionHandle, GAPBOND_PAIRING_STATE_BOND_SAVED, SUCCESS );
       }
       
       // We're done storing bond record and CCC values in NV
@@ -1797,8 +1917,29 @@ uint16 GAPBondMgr_ProcessEvent( uint8 task_id, uint16 events )
     
       return (events ^ GAP_BOND_SYNC_CC_EVT);
     }
+
+    osal_set_event( gapBondMgr_TaskID, GAP_BOND_SYNC_CC_EVT );
     
-    return ( GAP_BOND_SYNC_CC_EVT );
+    return (events ^ GAP_BOND_SYNC_CC_EVT);
+  }
+  
+  if ( events & GAP_BOND_SAVE_RCA_EVT )
+  {
+#if ( HOST_CONFIG & PERIPHERAL_CFG )
+
+#if defined (GAP_PRIVACY_RECONNECT)
+    if ( reconnectAddrIdx < GAP_BONDINGS_MAX )
+    {
+      // Save the new reconnection address
+      VOID gapBondMgrUpdateReconnectAddr( reconnectAddrIdx );
+      
+      reconnectAddrIdx = GAP_BONDINGS_MAX;
+    }
+#endif // GAP_PRIVACY_RECONNECT
+
+#endif // PERIPHERAL_CFG
+    
+    return (events ^ GAP_BOND_SAVE_RCA_EVT);
   }
 
   // Discard unknown events
@@ -1907,15 +2048,19 @@ static void gapBondMgr_ProcessGATTMsg( gattMsgEvent_t *pMsg )
   // Process the GATT message
   switch ( pMsg->method )
   {
+#ifndef GATT_NO_SERVICE_CHANGED
     case ATT_HANDLE_VALUE_CFM:
       // Clear Service Changed flag for this client
       VOID GAPBondMgr_ServiceChangeInd( pMsg->connHandle, 0x00 );
       break;
-
+#endif // GATT_NO_SERVICE_CHANGED
+      
     default:
       // Unknown message
       break;
   }
+  
+  GATT_bm_free(&pMsg->msg, pMsg->method);
 }
 
 /*********************************************************************
@@ -1946,6 +2091,7 @@ static void gapBondMgr_ProcessGATTServMsg( gattEventHdr_t *pMsg )
   }
 }
 
+#ifndef GATT_NO_SERVICE_CHANGED
 /*********************************************************************
  * @fn      gapBondMgrSendServiceChange
  *
@@ -1960,6 +2106,7 @@ static void gapBondMgrSendServiceChange( linkDBItem_t *pLinkItem )
   VOID GATTServApp_SendServiceChangedInd( pLinkItem->connectionHandle,
                                           gapBondMgr_TaskID );
 }
+#endif // GATT_NO_SERVICE_CHANGED
 
 /*********************************************************************
  * @fn      gapBondSetupPrivFlag
@@ -2056,7 +2203,86 @@ static void gapBondMgrSlaveSecurityReq( uint16 connHandle )
 
   VOID GAP_SendSlaveSecurityRequest( connHandle, authReq );
 }
-#endif
+
+#if defined (GAP_PRIVACY_RECONNECT)
+/*********************************************************************
+ * @fn      gapBondMgrUpdateReconnectAddr
+ *
+ * @brief   Update the reconnection address field of a bond record.
+ *
+ * @param   idx - Bond NV index
+ *
+ * @return  TRUE if reconnection address saved in NV. FALSE, otherwise.
+ */
+static uint8 gapBondMgrUpdateReconnectAddr( uint8 idx )
+{
+  gapBondRec_t bondRec;   // Space to read a Bond record from NV
+
+  // First see if bonding record exists in NV (public address in not all 0xFF's)
+  if ( (osal_snv_read( mainRecordNvID(idx), sizeof ( gapBondRec_t ), &bondRec ) == SUCCESS)
+      && (osal_isbufset( bondRec.publicAddr, 0xFF, B_ADDR_LEN ) == FALSE) )
+  {
+    // Update the reconnection address
+    VOID osal_memcpy( bondRec.reconnectAddr, bonds[idx].reconnectAddr, B_ADDR_LEN );
+
+    // Write out the entire bond entry
+    VOID osal_snv_write( mainRecordNvID(idx), sizeof ( gapBondRec_t ), &bondRec );
+    
+    return ( TRUE );
+  }
+  
+  return ( FALSE );
+}
+
+/*********************************************************************
+ * @fn      gapBondMgrAttrValueChangeCB
+ *
+ * @brief   Attribute value change callback.
+ *
+ * @param   connHandle - connection handle
+ * @param   attrId - attribute id
+ *
+ * @return  void
+ */
+static void gapBondMgrAttrValueChangeCB( uint16 connHandle, uint8 attrId )
+{
+  switch ( attrId )
+  {
+    case GGS_RECONNCT_ADDR_ATT:
+    {
+      // Reconnection address has been updated
+      linkDBItem_t *pLinkItem = linkDB_Find( connHandle );
+      if ( pLinkItem )
+      {
+        uint8 idx = gapBondMgrFindAddr( pLinkItem->addr );
+        if ( idx < GAP_BONDINGS_MAX )
+        {
+          uint8 reconnectAddr[B_ADDR_LEN];
+          
+          // Get the new reconnection address
+          if ( GGS_GetParameter( GGS_RECONNCT_ADDR_ATT, reconnectAddr ) == SUCCESS )
+          {
+            // Reverse bytes before saving the new reconnection address
+            VOID osal_revmemcpy( bonds[idx].reconnectAddr, reconnectAddr, B_ADDR_LEN );
+          
+            // Remember bond index for the reconnection address 
+            reconnectAddrIdx = idx;
+            
+            // Notify our task to save the reconnection address in NV
+            osal_set_event( gapBondMgr_TaskID, GAP_BOND_SAVE_RCA_EVT );
+          }
+        }
+      }
+    }
+    break;
+    
+    default:
+      break;
+  }
+}
+#endif // GAP_PRIVACY_RECONNECT
+
+#endif // PERIPHERAL_CFG
 
 /*********************************************************************
  * @fn      gapBondMgrBondReq
@@ -2111,11 +2337,13 @@ static void gapBondMgrBondReq( uint16 connHandle, uint8 idx, uint8 stateFlags,
  */
 static void gapBondMgr_SyncWhiteList( void )
 {
+  uint8 i;
+
   //erase the White List
   VOID HCI_LE_ClearWhiteListCmd();
 
   // Write bond addresses into the White List
-  for( uint8 i = 0; i < GAP_BONDINGS_MAX; i++)
+  for( i = 0; i < GAP_BONDINGS_MAX; i++)
   {
     // Make sure empty addresses are not added to the White List
     if ( osal_isbufset( bonds[i].publicAddr, 0xFF, B_ADDR_LEN ) == FALSE )
@@ -2161,7 +2389,7 @@ static uint8 gapBondMgr_SyncCharCfg( uint16 connHandle )
     // It is not possible to use this request on an attribute that has a value
     // that is longer than 2.
     if ( GATTServApp_ReadAttr( connHandle, pAttr, service, attrVal,
-                               &len, 0, ATT_BT_UUID_SIZE ) == SUCCESS )
+                               &len, 0, ATT_BT_UUID_SIZE, 0xFF ) == SUCCESS )
     {
       uint16 value = BUILD_UINT16(attrVal[0], attrVal[1]);
 

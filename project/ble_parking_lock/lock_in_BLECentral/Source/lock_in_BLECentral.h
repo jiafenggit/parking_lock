@@ -65,6 +65,11 @@ extern "C"
 #define START_SCAN_CAR_EXSIT_EVT                      0x0010
 #define START_SCAN_CAR_EMERGENCY_EVT                  0x0020
 #define START_WRITE_OWNER_INFO_IN_PEER_EVT            0x0040
+#define ATTEMPT_TO_EST_CONN_TIMEOUT_EVT               0x0080
+  
+#define LED1_PERIOD_FLASH_EVT                         0x0100
+#define FEED_WATCH_DOG_EVT                            0x0200
+   
    
    
    

@@ -1,7 +1,7 @@
 /**************************************************************************************************
   Filename:       OSAL_Timers.c
-  Revised:        $Date: 2012-11-28 00:37:02 -0800 (Wed, 28 Nov 2012) $
-  Revision:       $Revision: 32329 $
+  Revised:        $Date: 2014-06-16 15:12:16 -0700 (Mon, 16 Jun 2014) $
+  Revision:       $Revision: 39036 $
 
   Description:    OSAL Timer definition and manipulation functions.
 
@@ -550,7 +550,9 @@ void osal_adjust_timers( void )
     }
   }
 }
+#endif /* POWER_SAVING */
 
+#if defined POWER_SAVING || defined USE_ICALL
 /*********************************************************************
  * @fn      osal_next_timeout
  *
@@ -593,7 +595,7 @@ uint32 osal_next_timeout( void )
 
   return ( nextTimeout );
 }
-#endif // POWER_SAVING
+#endif // POWER_SAVING || USE_ICALL
 
 /*********************************************************************
  * @fn      osal_GetSystemClock()

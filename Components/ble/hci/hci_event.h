@@ -52,6 +52,7 @@ extern "C"
 
 extern uint8 bleEvtMask;
 extern uint8 pHciEvtMask[];
+extern uint8 pHciEvtMask2[];
 
 /*******************************************************************************
  * MACROS
@@ -60,18 +61,6 @@ extern uint8 pHciEvtMask[];
 /*******************************************************************************
  * CONSTANTS
  */
-
-// Event Mask Default Values
-#define BT_EVT_MASK_BYTE0                  0xFF
-#define BT_EVT_MASK_BYTE1                  0xFF
-#define BT_EVT_MASK_BYTE2                  0xFF
-#define BT_EVT_MASK_BYTE3                  0xFF
-#define BT_EVT_MASK_BYTE4                  0xFF
-#define BT_EVT_MASK_BYTE5                  0x9F
-#define BT_EVT_MASK_BYTE6                  0x00
-#define BT_EVT_MASK_BYTE7                  0x20
-//
-#define LE_EVT_MASK_DEFAULT                0x1F
 
 /*******************************************************************************
  * TYPEDEFS

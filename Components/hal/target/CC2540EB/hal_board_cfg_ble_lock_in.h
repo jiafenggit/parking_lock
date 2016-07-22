@@ -93,14 +93,14 @@ extern "C"
 
 /* 1 - Green */
 #define LED1_BV                        BV(0)
-#define LED1_SBIT                      P1_0
-#define LED1_DDR                       P1DIR
+#define LED1_SBIT                      P0_0
+#define LED1_DDR                       P0DIR
 #define LED1_POLARITY                  ACTIVE_LOW
 
   /* 2 - Red */
   #define LED2_BV                      BV(1)
-  #define LED2_SBIT                    P1_1
-  #define LED2_DDR                     P1DIR
+  #define LED2_SBIT                    P0_1
+  #define LED2_DDR                     P0DIR
   #define LED2_POLARITY                ACTIVE_LOW
 
   /* 3 - Yellow */
@@ -308,7 +308,7 @@ st( \
 
 /* debug config*/
 
-#define  UART_DEBUG  1  //0 close
+#define  UART_DEBUG   0  //0 close
 
 
 /* Driver Configuration */
@@ -377,7 +377,7 @@ st( \
 
 /* Set to TRUE enable UART usage, FALSE disable it */
 #ifndef HAL_UART
-#define HAL_UART TRUE
+#define HAL_UART FALSE
 #endif
 
 #if HAL_UART
