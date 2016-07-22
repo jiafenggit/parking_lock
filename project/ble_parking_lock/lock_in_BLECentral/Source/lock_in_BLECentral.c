@@ -149,7 +149,7 @@
    
 //#define  START_SCAN_CAR_ON_NORMAL           3000//3s  on connected time
 #define  START_SCAN_CAR_ON_EMERGENCY          666 //0.66s on emergenvy 
-#define  CAR_SIG_NO_EXSIT_TRIGGER_VALUE       15  //15次没有检测到信号就立起档杆
+#define  CAR_SIG_NO_EXSIT_TRIGGER_VALUE       10  //10次没有检测到信号就立起档杆
 
 
 #define  PARK_FLAG_ENTER                      1
@@ -1319,8 +1319,8 @@ static void wkxboot_connect()
         // LL_CreateConnCancel();
          app_write_string("\r\n终止连接!连接过程出错!status:");
          app_write_string(uint8_to_string(rt_status));
-         app_write_string("\r\n1秒钟后重新开始扫描!");
-         osal_start_timerEx(lock_in_BLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);//1s
+         app_write_string("\r\n0.5秒钟后重新开始扫描!");
+         osal_start_timerEx(lock_in_BLETaskId,START_SCAN_EVT,DEFAULT_START_TO_SCAN_DELAY);//
        }
       
     }      
