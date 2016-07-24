@@ -45,8 +45,9 @@
 #define  MOTOR_VERIFY_VALUE               5000//5s
 
 /*define motor state */
-#define  MOTOR_STATE_ON_RUNNING                  1
-#define  MOTOR_STATE_ON_STOP                     2
+#define  MOTOR_STATE_ON_POSITIVE_RUNNING         1
+#define  MOTOR_STATE_ON_NEGATIVE_RUNNING         2
+#define  MOTOR_STATE_ON_STOP                     3
 
 /*define MOVABLE_ARM state */
 #define  MOVABLE_ARM_ON_90_90_STATE              1
@@ -61,7 +62,8 @@
 #define  SIGNAL_STOP_PERIODIC_VERIFY             4
 #define  SIGNAL_MOVABLE_ARM_ON_TOP               5
 #define  SIGNAL_MOVABLE_ARM_ON_BOTTOM            6
-
+#define  SIGNAL_MOTOR_IS_BLOCK                   7
+#define  SIGNAL_MOTOR_IS_VERIFY                  8
 
 
 #define  MOTOR_POSITIVE_RUN_POLARITY         ACTIVE_HIGH

@@ -8,7 +8,7 @@
 #include"hal_motor.h"
 
 
-#define  MOTOR_RATED_VOLTAGE              5.0    //5v
+#define  MOTOR_RATED_VOLTAGE              5.5   //5.5v
 #define  MOTOR_BLOCK_RES                  3.25 //3.25ohm
 #define  MOTOR_BLOCK_CHECK_RES            0.2  //0.2ohm
 
@@ -31,13 +31,14 @@ static void hal_process_motor_verify_latency();//hal driver call
 static void hal_check_movable_arm_position();
 static void hal_send_motor_signal(uint8 signal);
 static void hal_process_movable_arm_state();
+static void hal_block_process_movable_arm_state();
 
 process_motor_event_t  process_motor_event=NULL;
 
 static uint8 cur_motor_state=MOTOR_STATE_ON_STOP;//马达状态 stop or running
 static uint8 cur_movable_arm_state=MOVABLE_ARM_ON_90_90_STATE;//当前活动杆状态
 static uint8 tar_movable_arm_state=MOVABLE_ARM_ON_90_90_STATE;//目标活动杆状态
-
+static uint8 app_tar_movable_arm_state=MOVABLE_ARM_ON_90_90_STATE;//app目标位置
 
 void hal_motor_check_init()
 {
@@ -97,6 +98,8 @@ static void hal_stop_motor_speed_check_timer()
 /*活动档杆位置检测*/
 static void hal_check_movable_arm_position()
 {
+    hal_motor_check_open();//打开光线电源
+  
    if(!(MOTOR_CHECK_PORT & MOTOR_SPEED_ECHO_POS) && !(MOTOR_CHECK_PORT & MOTOR_STOP_ECHO_POS))//如果同时为低，档杆立起，在90度点。
   {  
     cur_movable_arm_state=MOVABLE_ARM_ON_90_90_STATE;  
@@ -117,7 +120,7 @@ static void hal_check_movable_arm_position()
     cur_movable_arm_state=MOVABLE_ARM_ON_0_0_STATE;
     app_write_string("\r\n00-00");
    }
- 
+   hal_motor_check_close();//关闭光线电源
 }
 
 /*堵转处理*/
@@ -125,15 +128,14 @@ void hal_process_motor_check_motor_block_event()//检查到堵转就停止运行
 {
     app_write_string("\r\n赌转检查...");
   
-    if(cur_motor_state==MOTOR_STATE_ON_RUNNING)//只要马达在转动就检查堵转
+    if(cur_motor_state!=MOTOR_STATE_ON_STOP)//只要马达在转动就检查堵转
    {
     app_write_string("\r\nnb!");
     if(hal_motor_is_block())//如果检查到堵转 根据活动杆的位置进行相应的处理
     {
      app_write_string("\r\n堵转!"); 
-     
-     hal_stop_motor_speed_check_timer();
-     hal_motor_stop_run();
+     hal_check_movable_arm_position();
+     hal_block_process_movable_arm_state();
     }
     else
     {
@@ -155,9 +157,9 @@ void hal_process_motor_check_motor_block_event()//检查到堵转就停止运行
 void hal_process_motor_check_speed_event()
 {
   app_write_string("\r\n运行过程检测!");
-  hal_motor_check_open();//打开光线电源
+
   hal_check_movable_arm_position();
-  
+
   if(cur_movable_arm_state!=tar_movable_arm_state)
    {
     hal_start_motor_speed_check_timer();//重新开始运行过程检测定时器   
@@ -178,7 +180,6 @@ void hal_process_motor_check_speed_event()
       
   }
   
- hal_motor_check_close();//关闭光线电源
 }
 
 static void hal_send_motor_signal(uint8 signal)
@@ -196,7 +197,7 @@ static void hal_send_motor_signal(uint8 signal)
 
 static void hal_motor_positive_run()
 {
-  cur_motor_state=MOTOR_STATE_ON_RUNNING;
+  cur_motor_state=MOTOR_STATE_ON_POSITIVE_RUNNING;
   
   motor_negative_inactive();
   motor_positive_active();
@@ -214,7 +215,7 @@ static void hal_motor_positive_run()
 static void hal_motor_negative_run()
 {
 
-  cur_motor_state=MOTOR_STATE_ON_RUNNING;
+  cur_motor_state=MOTOR_STATE_ON_NEGATIVE_RUNNING;
   
   motor_positive_inactive();
   motor_negative_active();
@@ -237,8 +238,10 @@ void hal_motor_stop_run()
   motor_positive_inactive();
   motor_negative_inactive();
 
+  hal_stop_motor_block_check_timer();
+  hal_stop_motor_speed_check_timer();
+  
   hal_send_motor_signal(SIGNAL_START_PERIODIC_VERIFY);//开始校验位置
-  hal_send_motor_signal(SIGNAL_STOP_TO_SCAN_CAR);//如果有的话就停止紧急扫描车辆
   app_write_string("\r\n马达停止运转!"); 
 }
 
@@ -258,13 +261,11 @@ static void hal_process_movable_arm_state()
   case MOVABLE_ARM_ON_0_90_STATE:
     {
      hal_motor_positive_run();
-     hal_send_motor_signal(SIGNAL_START_TO_SCAN_CAR);//
     }
     break;
   case MOVABLE_ARM_ON_90_180_STATE:
     {
      hal_motor_negative_run();
-     hal_send_motor_signal(SIGNAL_STOP_TO_SCAN_CAR);//如果有的话就停止紧急扫描车辆
     }
     break;
   default:
@@ -285,7 +286,6 @@ static void hal_process_movable_arm_state()
   case MOVABLE_ARM_ON_90_180_STATE:
     {
       hal_motor_negative_run();
-      hal_send_motor_signal(SIGNAL_STOP_TO_SCAN_CAR);
     }
     break;
   case MOVABLE_ARM_ON_0_0_STATE:
@@ -301,32 +301,112 @@ static void hal_process_movable_arm_state()
    }
     
   }
+ 
 }
+
+static void hal_block_process_movable_arm_state()
+{
+  
+if(cur_motor_state==MOTOR_STATE_ON_POSITIVE_RUNNING)
+{ 
+  switch(cur_movable_arm_state)  
+  {
+    case MOVABLE_ARM_ON_0_0_STATE:
+    {
+      hal_motor_stop_run();
+    }
+    break;
+    case MOVABLE_ARM_ON_0_90_STATE:
+    {
+     tar_movable_arm_state=MOVABLE_ARM_ON_0_0_STATE;
+     hal_motor_negative_run();
+    }
+    break;
+    case MOVABLE_ARM_ON_90_90_STATE:
+    {
+     hal_motor_stop_run();
+    }
+    break;
+    case MOVABLE_ARM_ON_90_180_STATE:
+    {
+     //tar_movable_arm_state=MOVABLE_ARM_ON_90_90_STATE;
+     //hal_motor_negative_run();
+     hal_motor_stop_run();
+    }
+    break;
+    case MOVABLE_ARM_ON_INIT_STATE:
+    {
+     hal_motor_stop_run(); 
+    }
+    break;
+    default:
+    break;
+  }
+}
+else if(cur_motor_state==MOTOR_STATE_ON_NEGATIVE_RUNNING)
+{  
+  switch(cur_movable_arm_state)  
+  {
+    case MOVABLE_ARM_ON_0_0_STATE:
+    {
+      hal_motor_stop_run();
+    }
+    break;
+    case MOVABLE_ARM_ON_0_90_STATE:
+    {
+     tar_movable_arm_state=MOVABLE_ARM_ON_90_90_STATE;
+     hal_motor_positive_run();
+    }
+    break;
+    case MOVABLE_ARM_ON_90_90_STATE:
+    {
+     hal_motor_stop_run();
+    }
+    break;
+    case MOVABLE_ARM_ON_90_180_STATE:
+    {
+     tar_movable_arm_state=MOVABLE_ARM_ON_INIT_STATE;
+     hal_motor_positive_run();
+    }
+    break;
+    case MOVABLE_ARM_ON_INIT_STATE:
+    {
+     hal_motor_stop_run(); 
+    }
+    break;
+    default:
+    break;
+  }
+ } 
+}
+
 
 void app_movable_arm_set_target_90_90()
 {
-  if(tar_movable_arm_state!=MOVABLE_ARM_ON_90_90_STATE)//如果活动杆目标不是90度
+  if(app_tar_movable_arm_state!=MOVABLE_ARM_ON_90_90_STATE)//如果活动杆目标不是90度
   {
-  tar_movable_arm_state=MOVABLE_ARM_ON_90_90_STATE;
+   app_tar_movable_arm_state=MOVABLE_ARM_ON_90_90_STATE;
   }
   else
   {
   app_write_string("\r\n目标90活动杆正确!");  
   }
+  tar_movable_arm_state=app_tar_movable_arm_state;
   hal_process_movable_arm_state();//处理活动杆状态
   
 }
 
 void app_movable_arm_set_target_0_0()
 {
-  if(tar_movable_arm_state!=MOVABLE_ARM_ON_0_0_STATE)//如果活动杆目标不是90度
+  if(app_tar_movable_arm_state!=MOVABLE_ARM_ON_0_0_STATE)//如果活动杆目标不是00度
   {
-  tar_movable_arm_state=MOVABLE_ARM_ON_0_0_STATE;
+  app_tar_movable_arm_state=MOVABLE_ARM_ON_0_0_STATE;
   }
   else
   {
   app_write_string("\r\n目标活动杆0正确!");  
   }
+  tar_movable_arm_state=app_tar_movable_arm_state;
   hal_process_movable_arm_state();//处理活动杆状态
 }
 
@@ -367,10 +447,8 @@ void hal_process_motor_verify_event()//hal driver call
 }
 static void hal_process_motor_verify_latency()//hal driver call
 {
-  hal_motor_check_open();//open led power 
-  
+  tar_movable_arm_state=app_tar_movable_arm_state;
   hal_check_movable_arm_position();
   hal_process_movable_arm_state();
   
-  hal_motor_check_close();//close led power
 }
