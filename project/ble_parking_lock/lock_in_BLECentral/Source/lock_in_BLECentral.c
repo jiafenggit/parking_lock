@@ -81,7 +81,7 @@
 #define DEFAULT_MAX_SCAN_RES                  8
 
 // Scan duration in ms
-#define DEFAULT_SCAN_DURATION                 500
+#define DEFAULT_SCAN_DURATION                 125
 
 // Discovey mode (limited, general, all)
 #define DEFAULT_DISCOVERY_MODE               DEVDISC_MODE_ALL
@@ -140,13 +140,13 @@
 
 #define  ATTEMPT_TO_EST_CONN_TIMEOUT_VALUE    2000
    
-#define  DEFAULT_START_TO_SCAN_DELAY          500//wkxboot in ms
+#define  DEFAULT_START_TO_SCAN_DELAY          125//wkxboot in ms
 
    
 #define  BAT_VOLTAGE_SCALE                    4.7 //1:4.7
 #define  BAT_FULL_VOLTAGE                     5.8  
 
-#define  CAR_SIG_NO_EXSIT_TRIGGER_VALUE         10  //10次没有检测到信号就立起档杆
+#define  CAR_SIG_NO_EXSIT_TRIGGER_VALUE         (10000/DEFAULT_SCAN_DURATION/2)   //10次没有检测到信号就立起档杆
 #define  CAR_SIG_NO_EXSIT_BLOCK_TRIGGER_VALUE   (30*60)//半个小时后再校验起竿
 
 #define  PARK_FLAG_ENTER                      1

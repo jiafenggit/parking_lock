@@ -354,8 +354,9 @@ else if(cur_motor_state==MOTOR_STATE_ON_NEGATIVE_RUNNING)
     break;
     case MOVABLE_ARM_ON_0_90_STATE:
     {
-     tar_movable_arm_state=MOVABLE_ARM_ON_90_90_STATE;
-     hal_motor_positive_run();
+     //tar_movable_arm_state=MOVABLE_ARM_ON_90_90_STATE;
+     //hal_motor_positive_run();
+       hal_motor_stop_run();
     }
     break;
     case MOVABLE_ARM_ON_90_90_STATE:
