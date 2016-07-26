@@ -81,7 +81,7 @@
 #define DEFAULT_MAX_SCAN_RES                  8
 
 // Scan duration in ms
-#define DEFAULT_SCAN_DURATION                 125
+#define DEFAULT_SCAN_DURATION                 500
 
 // Discovey mode (limited, general, all)
 #define DEFAULT_DISCOVERY_MODE               DEVDISC_MODE_ALL
@@ -140,7 +140,7 @@
 
 #define  ATTEMPT_TO_EST_CONN_TIMEOUT_VALUE    2000
    
-#define  DEFAULT_START_TO_SCAN_DELAY          125//wkxboot in ms
+#define  DEFAULT_START_TO_SCAN_DELAY          500//wkxboot in ms
 
    
 #define  BAT_VOLTAGE_SCALE                    4.7 //1:4.7

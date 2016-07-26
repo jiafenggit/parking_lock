@@ -8,7 +8,7 @@
 #include"hal_motor.h"
 
 
-#define  MOTOR_RATED_VOLTAGE              5.5   //5.5v
+#define  MOTOR_RATED_VOLTAGE              5.5  //5.5v
 #define  MOTOR_BLOCK_RES                  3.25 //3.25ohm
 #define  MOTOR_BLOCK_CHECK_RES            0.2  //0.2ohm
 
