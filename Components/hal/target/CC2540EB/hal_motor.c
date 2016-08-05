@@ -10,7 +10,7 @@
 
 #define  MOTOR_RATED_VOLTAGE              5.5  //5.5v
 #define  MOTOR_BLOCK_RES                  3.25 //3.25ohm
-#define  MOTOR_BLOCK_CHECK_RES            0.2  //0.2ohm
+#define  MOTOR_BLOCK_CHECK_RES            0.1  //0.1ohm
 
 #define  MOTOR_BLOCK_CHECK_CHN            HAL_ADC_CHANNEL_4
 #define  MOTOR_BLOCK_VOLTAGE              (((MOTOR_RATED_VOLTAGE/MOTOR_BLOCK_RES)*MOTOR_BLOCK_CHECK_RES)*100)            

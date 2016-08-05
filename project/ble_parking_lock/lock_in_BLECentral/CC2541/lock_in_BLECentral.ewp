@@ -282,11 +282,13 @@
           <state>HALNODEBUG</state>
           <state>OSAL_CBTIMER_NUM_TASKS=1</state>
           <state>HAL_AES_DMA=TRUE</state>
-          <state>HAL_DMA=TRUE</state>
           <state>POWER_SAVING</state>
-          <state>xHAL_LCD=TRUE</state>
           <state>HAL_LED=TRUE</state>
-          <state>OSALMEM_METRICS=FALSE</state>
+          <state>HAL_UART=TRUE</state>
+          <state>HAL_DMA=TRUE</state>
+          <state>HAL_KEY=FALSE</state>
+          <state>UART_DEBUG=TRUE</state>
+          <state>OSALMEM_METRICS=TRUE</state>
         </option>
         <option>
           <name>CCPreprocFile</name>

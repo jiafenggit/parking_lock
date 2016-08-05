@@ -6,10 +6,10 @@
 
 #define  MOTOR_CHECK_PORT                  P1
 
-#define  MOTOR_SPEED_ECHO_POS              BV(2)
-#define  MOTOR_SPEED_ECHO_SBIT             P1_2
-#define  MOTOR_STOP_ECHO_POS               BV(3)
-#define  MOTOR_STOP_ECHO_SBIT              P1_3
+#define  MOTOR_SPEED_ECHO_POS              BV(6)
+#define  MOTOR_SPEED_ECHO_SBIT             P1_6
+#define  MOTOR_STOP_ECHO_POS               BV(7)
+#define  MOTOR_STOP_ECHO_SBIT              P1_7
 #define  MOTOR_POSITIVE_RUN_POS            BV(4)
 #define  MOTOR_POSITIVE_RUN_SBIT           P1_4
 #define  MOTOR_NEGATIVE_RUN_POS            BV(5)
