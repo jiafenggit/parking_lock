@@ -449,20 +449,6 @@ uint16 lock_in_BLECentral_ProcessEvent( uint8 task_id, uint16 events )
     {
       lock_in_BLECentral_ProcessOSALMsg( (osal_event_hdr_t *)pMsg );
       
-#if (OSALMEM_METRICS)
-    {
-    uint16 i;
-    i=osal_heap_mem_used();
-    app_write_string("\r\nmem used:");
-    app_write_string(uint16_to_string(i));   
-    i= osal_heap_block_cnt();
-    app_write_string("\r\nmem block:");
-    app_write_string(uint16_to_string(i));
-    i= osal_heap_block_free();
-    app_write_string("\r\nmem free:");
-    app_write_string(uint16_to_string(i));
-    }
-#endif
     
       // Release the OSAL message
       VOID osal_msg_deallocate( pMsg );
@@ -513,6 +499,20 @@ uint16 lock_in_BLECentral_ProcessEvent( uint8 task_id, uint16 events )
     osal_start_timerEx(lock_in_BLETaskId,LED1_PERIOD_FLASH_EVT,LED1_PERIOD_FLASH_VALUE);
     HalLedSet(HAL_LED_1,HAL_LED_MODE_BLINK);
     
+#if (OSALMEM_METRICS)
+    {
+    uint16 i;
+    i=osal_heap_mem_used();
+    app_write_string("\r\nmem used:");
+    app_write_string(uint16_to_string(i));   
+    i= osal_heap_block_cnt();
+    app_write_string("\r\nmem block:");
+    app_write_string(uint16_to_string(i));
+    i= osal_heap_block_free();
+    app_write_string("\r\nmem free:");
+    app_write_string(uint16_to_string(i));
+    }
+#endif
     return ( events ^ LED1_PERIOD_FLASH_EVT );
   }
   
@@ -921,46 +921,6 @@ static void lock_in_BLECentral_HandleKeys( uint8 shift, uint8 keys )
   {
     
     app_write_string("\r\n系统收到KEY_FUN1");
-    /*
-    if ( simpleBLEState == BLE_STATE_CONNECTED &&
-              BLE_lock_in_CharHdl != 0 &&
-              simpleBLEProcedureInProgress == FALSE )
-    {
-      uint8 status;
-      
-      // Do a read or write as long as no other read or write is in progress
-      if ( simpleBLEDoWrite )
-      {
-        // Do a write
-        attWriteReq_t req;
-        
-        req.handle = BLE_lock_in_CharHdl;
-        req.len = sizeof(ble_device_t);;
-        *((ble_device_t*)req.value) = owner_info;
-        req.sig = 0;
-        req.cmd = 0;
-        status = GATT_WriteCharValue( simpleBLEConnHandle, &req, lock_in_BLETaskId );    
-        app_write_string("\r\n开始写值!status:");
-        app_write_string(uint8_to_string(status));
-      }
-      else
-      {
-        // Do a read
-        attReadReq_t req;
-        
-        req.handle = BLE_lock_in_CharHdl;
-        status = GATT_ReadCharValue( simpleBLEConnHandle, &req, lock_in_BLETaskId );
-        app_write_string("\r\n开始读值!status:");
-        app_write_string(uint8_to_string(status));
-      }
-      
-      if ( status == SUCCESS )
-      {
-        simpleBLEProcedureInProgress = TRUE;
-        simpleBLEDoWrite = !simpleBLEDoWrite;
-      }
-    }  
-    */
   } 
   if ( keys & KEY_FUN2 )
   {
@@ -982,6 +942,7 @@ static void lock_in_BLECentralProcessGATTMsg( gattMsgEvent_t *pMsg )
     // In case a GATT message came after a connection has dropped,
     // ignore the message
     app_write_string("\r\n读写错误!没有连接!");
+    GATT_bm_free( &pMsg->msg, pMsg->method );
     return;
   }
   
