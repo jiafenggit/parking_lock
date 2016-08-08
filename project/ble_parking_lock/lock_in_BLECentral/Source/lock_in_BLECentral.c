@@ -1371,11 +1371,13 @@ static uint8 lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
           simpleBLEProcedureInProgress = TRUE;    
 
           // If service discovery not performed initiate service discovery
+          /* //不再保留数据通信，直接连接上就不问。
           if ( BLE_lock_in_CharHdl == 0 )
           {
             osal_start_timerEx( lock_in_BLETaskId, START_DISCOVERY_EVT, DEFAULT_SVC_DISCOVERY_DELAY );
-            
-          }                     
+            app_write_string("\r\n开始发现services.....");
+          }      
+          */
           app_write_string("\r\n连接成功!连接的蓝牙地址:");
           app_write_string(bdAddr2Str(pEvent->linkCmpl.devAddr));
           app_write_string("\r\n连接的connhandle:");
@@ -1386,9 +1388,6 @@ static uint8 lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
             app_write_string("\r\n显示rssi值.");
             GAPCentralRole_StartRssi(simpleBLEConnHandle,DEFAULT_RSSI_PERIOD);
           }
-          app_write_string("\r\n开始发现services.....");
-
-          //car_exsit_cnt=0;//复位无车次数
           
         }
         else
