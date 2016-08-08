@@ -142,9 +142,7 @@
    
 #define  DEFAULT_START_TO_SCAN_DELAY          500//wkxboot in ms
 
-   
-#define  BAT_VOLTAGE_SCALE                    4.7 //1:4.7
-#define  BAT_FULL_VOLTAGE                     5.8  
+  
 
 #define  CAR_SIG_NO_EXSIT_TRIGGER_VALUE         (10000/DEFAULT_SCAN_DURATION/2)   //10次没有检测到信号就立起档杆
 #define  CAR_SIG_NO_EXSIT_BLOCK_TRIGGER_VALUE   (30*60)//半个小时后再校验起竿
@@ -567,8 +565,8 @@ static void lock_in_BLECentral_ProcessOSALMsg( osal_event_hdr_t *pMsg )
 
 static void lock_in_BLECentral_Handlebatt(uint8 batt)
 {
-  owner_info.ble_battery=(uint8)(batt*(BAT_VOLTAGE_SCALE+1)/BAT_FULL_VOLTAGE);//约等于n*100*1.25*(BAT_VOLTAGE_SCALE+1)/BAT_FULL_VOLTAGE*128; 
-  app_write_string("\r\n更新owner info batt 完成,当前owner info batt:");
+  owner_info.ble_battery=batt;
+  app_write_string("\r\n更新owner batt 完成,当前owner batt(%):");
   app_write_string(uint8_to_string(owner_info.ble_battery));
 }
 

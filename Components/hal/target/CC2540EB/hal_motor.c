@@ -8,12 +8,14 @@
 #include"hal_motor.h"
 
 
-#define  MOTOR_RATED_VOLTAGE              5.5  //5.5v
+
 #define  MOTOR_BLOCK_RES                  3.25 //3.25ohm
 #define  MOTOR_BLOCK_CHECK_RES            0.2  //0.2ohm
 
-#define  MOTOR_BLOCK_CHECK_CHN            HAL_ADC_CHANNEL_4
-#define  MOTOR_BLOCK_VOLTAGE              (((MOTOR_RATED_VOLTAGE/MOTOR_BLOCK_RES)*MOTOR_BLOCK_CHECK_RES)*100)            
+#define  MOTOR_BLOCK_CHECK_CHN            HAL_ADC_CHANNEL_4       
+
+
+extern float batt_v;
 
 static void hal_motor_positive_run();
 static void hal_motor_negative_run();
@@ -71,7 +73,7 @@ static bool hal_motor_is_block()
   app_write_string(uint8_to_string(v));
   
  
-  if(v<0x80 && v>=MOTOR_BLOCK_VOLTAGE)//超过0x80就是负电压不正确
+  if(v<0x80 && v>=(uint8)(((batt_v/MOTOR_BLOCK_RES)*MOTOR_BLOCK_CHECK_RES)*100))//超过0x80就是负电压不正确
     return TRUE;
   else
     return FALSE;
