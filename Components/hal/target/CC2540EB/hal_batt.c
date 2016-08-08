@@ -37,6 +37,9 @@ void hal_process_update_batt_info_event()
  
  batt_v=batt*0.01*(BAT_VOLTAGE_SCALE+1); 
  
+ if(!(batt_v>BAT_EMPTY_VOLTAGE))//万一测量不准确，导致堵转检查错误
+ batt_v=BAT_EMPTY_VOLTAGE;
+ 
  batt_percent=(uint8)(100*(batt_v-BAT_EMPTY_VOLTAGE)/(BAT_FULL_VOLTAGE-BAT_EMPTY_VOLTAGE));
  
  app_write_string("v:");

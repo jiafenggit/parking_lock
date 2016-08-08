@@ -9,8 +9,9 @@
 
 
 
-#define  MOTOR_BLOCK_RES                  3.25 //3.25ohm
+#define  MOTOR_BLOCK_RES                  4.00 //4.00ohm
 #define  MOTOR_BLOCK_CHECK_RES            0.2  //0.2ohm
+#define  MOTOR_MAX_BLOCK_VOLTAGE          60   //0.6V 3A
 
 #define  MOTOR_BLOCK_CHECK_CHN            HAL_ADC_CHANNEL_4       
 
@@ -72,8 +73,8 @@ static bool hal_motor_is_block()
   app_write_string("\r\nmotor block v:");
   app_write_string(uint8_to_string(v));
   
- 
-  if(v<0x80 && v>=(uint8)(((batt_v/MOTOR_BLOCK_RES)*MOTOR_BLOCK_CHECK_RES)*100))//超过0x80就是负电压不正确
+  
+  if(v<MOTOR_MAX_BLOCK_VOLTAGE && v>=(uint8)(((batt_v/MOTOR_BLOCK_RES)*MOTOR_BLOCK_CHECK_RES)*100))//超过0x80就是负电压不正确
     return TRUE;
   else
     return FALSE;
