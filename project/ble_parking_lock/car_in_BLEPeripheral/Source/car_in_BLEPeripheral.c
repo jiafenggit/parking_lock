@@ -142,7 +142,9 @@
 #define  CUR_CONNET_TARGET_LOCK_IN            0x11 //当前连接的是lockin
 #define  CUR_CONNET_TARGET_CONTROL            0x22 //当前连接的是control
 
-#define  LED1_PERIOD_FLASH_VALUE              2000//2s闪烁一次
+#define  LED1_PERIOD_FLASH_VALUE              1000//1s闪烁一次
+#define  LED2_PERIOD_FLASH_VALUE              400 //0.4秒闪烁一次，低电压时
+#define  BATT_VOLTAGE_LOW_WARNING_PERCENT     10  //低于10%报警 led2闪烁
 #define  FEED_WATCH_DOG_VALUE                 900 //900ms喂一次
 
 
@@ -644,6 +646,14 @@ uint16 SimpleBLEPeripheral_ProcessEvent( uint8 task_id, uint16 events )
     return ( events ^ LED1_PERIOD_FLASH_EVT );
   }
   
+    if ( events & LED2_PERIOD_FLASH_EVT )
+  {
+    osal_start_timerEx(simpleBLEPeripheral_TaskID,LED2_PERIOD_FLASH_EVT,LED2_PERIOD_FLASH_VALUE);
+    HalLedSet(HAL_LED_2,HAL_LED_MODE_BLINK);
+    
+    return ( events ^ LED2_PERIOD_FLASH_EVT );
+  }
+  
    if ( events & FEED_WATCH_DOG_EVT )
   {
     osal_start_timerEx(simpleBLEPeripheral_TaskID,FEED_WATCH_DOG_EVT,FEED_WATCH_DOG_VALUE);
@@ -688,8 +698,13 @@ static void simpleBLEPeripheral_Handlebatt(uint8 batt)
   SimpleProfile_GetParameter(PARAM_BLE_CAR_IN_CHAR,&car_in );
   car_in.ble_battery=batt;
   SimpleProfile_SetParameter(PARAM_BLE_CAR_IN_CHAR,sizeof(ble_device_t),&car_in );
-  app_write_string("\r\n更新car in batt 完成,当前car in:");
+  app_write_string("\r\n更新car in batt 完成,当前car in batt(%):");
   app_write_string(uint8_to_string(car_in.ble_battery));
+  
+  if(batt<BATT_VOLTAGE_LOW_WARNING_PERCENT)//低电量时闪烁 否则就关闭低电量闪烁灯
+    osal_start_timerEx(simpleBLEPeripheral_TaskID,LED2_PERIOD_FLASH_EVT,LED2_PERIOD_FLASH_VALUE);
+  else
+    osal_stop_timerEx(simpleBLEPeripheral_TaskID,LED2_PERIOD_FLASH_EVT);
 }
 /*********************************************************************
  * @fn      simpleBLEPeripheral_HandleKeys

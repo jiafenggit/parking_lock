@@ -2,7 +2,7 @@
 #define __HAL_BATT_H__
 
 
-#define BATT_UPDATE_VALUE           60000       //1分钟测一次
+#define BATT_UPDATE_VALUE           30000       //半分钟测一次
 
 
 

@@ -41,7 +41,7 @@
 
 /*define motor timeout value*/
 #define  MOTOR_CHECK_BLOCK_VALUE          200 //0.2s
-#define  MOTOR_CHECK_SPEED_VALUE          50 //0.05s
+#define  MOTOR_CHECK_SPEED_VALUE          50  //0.05s
 #define  MOTOR_VERIFY_VALUE               2000//2s
 
 /*define motor state */

@@ -7,10 +7,21 @@
 
 hal_batt_cb_t batt_callback;
 
+#if defined(BLE_CAR_IN_PROJ) && (BLE_CAR_IN_PROJ==1)
+
+#define  BAT_VOLTAGE_SCALE                    3  //1:3
+#define  BAT_FULL_VOLTAGE                     3.4//3.4v  
+#define  BAT_EMPTY_VOLTAGE                    2.6//2.6v
+
+#elif defined(BLE_LOCK_IN_PROJ) && (BLE_LOCK_IN_PROJ==1)
+
 #define  BAT_VOLTAGE_SCALE                    4.7 //1:4.7
 #define  BAT_FULL_VOLTAGE                     6.2 //6.2v  
 #define  BAT_EMPTY_VOLTAGE                    4.4 //4.4v
 
+#else 
+#error "no project defined in hal_batt.c"
+#endif
 
 float batt_v=BAT_FULL_VOLTAGE;
 uint8 batt_percent;
@@ -33,12 +44,15 @@ void hal_process_update_batt_info_event()
  uint8 batt; 
  batt=halGetVoltageMonitorInput(BATT_MONITOR_CHN);
  
- batt_v=batt*0.01*(BAT_VOLTAGE_SCALE+1); 
+ batt_v=batt*0.00976*(BAT_VOLTAGE_SCALE+1); 
+ 
+ if(!(batt_v>BAT_EMPTY_VOLTAGE))//万一电压检测不准确，出现错误
+   batt_v=BAT_EMPTY_VOLTAGE;
  
  batt_percent=(uint8)(100*(batt_v-BAT_EMPTY_VOLTAGE)/(BAT_FULL_VOLTAGE-BAT_EMPTY_VOLTAGE));
  
- app_write_string("v:");
- app_write_string(uint8_to_string((uint8)batt_v));
+ app_write_string("batt v:");
+ app_write_string(uint8_to_string((uint8)(batt_v*10)));
  
  if(batt_callback)
   batt_callback(batt_percent);
