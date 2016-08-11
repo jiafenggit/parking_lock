@@ -102,7 +102,7 @@
 #define DEFAULT_RSSI_PERIOD                   1000
 
 // Whether to enable automatic parameter update request when a connection is formed
-#define DEFAULT_ENABLE_UPDATE_REQUEST         FALSE
+#define DEFAULT_ENABLE_UPDATE_REQUEST         TRUE
 
 // Minimum connection interval (units of 1.25ms) if automatic parameter update request is enabled
 #define DEFAULT_UPDATE_MIN_CONN_INTERVAL      800
@@ -362,18 +362,6 @@ void lock_in_BLECentral_Init( uint8 task_id )
   */
   
   GAP_SetParamValue( TGAP_CONN_EST_SUPERV_TIMEOUT,DEFAULT_UPDATE_CONN_TIMEOUT);
-  uint16 min_con,max_con,to,lat;
-
-  min_con= GAP_GetParamValue(TGAP_CONN_EST_INT_MIN);
-  max_con=GAP_GetParamValue(TGAP_CONN_EST_INT_MAX);
-  lat=GAP_GetParamValue(TGAP_CONN_EST_LATENCY);
-  to=GAP_GetParamValue( TGAP_CONN_EST_SUPERV_TIMEOUT);
-  
- app_write_string("\r\n当前链接参数:");
- app_write_string( uint16_to_string(min_con));
- app_write_string( uint16_to_string(max_con));
- app_write_string( uint16_to_string(lat));
- app_write_string( uint16_to_string(to));
 
   GGS_SetParameter( GGS_DEVICE_NAME_ATT, GAP_DEVICE_NAME_LEN, (uint8 *) simpleBLEDeviceName );
 
@@ -1382,6 +1370,15 @@ static uint8 lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
           app_write_string("\r\n连接的connhandle:");
           app_write_string(uint16_to_string(simpleBLEConnHandle));
           
+          
+          if(DEFAULT_ENABLE_UPDATE_REQUEST)//更新连接参数
+          {
+           //主动更新参数
+          GAPCentralRole_UpdateLink( simpleBLEConnHandle, DEFAULT_UPDATE_MIN_CONN_INTERVAL,
+                                     DEFAULT_UPDATE_MAX_CONN_INTERVAL,DEFAULT_UPDATE_SLAVE_LATENCY ,
+                                     DEFAULT_UPDATE_CONN_TIMEOUT );
+          }
+          
           if(simpleBLERssi)
           {
             app_write_string("\r\n显示rssi值.");
@@ -1431,6 +1428,19 @@ static uint8 lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
     case GAP_LINK_PARAM_UPDATE_EVENT:
       {
         app_write_string("\r\nlink param update!");
+        
+        uint16 min_con,max_con,to,lat;
+
+        min_con= GAP_GetParamValue(TGAP_CONN_EST_INT_MIN);
+        max_con=GAP_GetParamValue(TGAP_CONN_EST_INT_MAX);
+        lat=GAP_GetParamValue(TGAP_CONN_EST_LATENCY);
+        to=GAP_GetParamValue( TGAP_CONN_EST_SUPERV_TIMEOUT);
+  
+       app_write_string("\r\n当前链接参数:");
+       app_write_string( uint16_to_string(min_con));
+       app_write_string( uint16_to_string(max_con));
+       app_write_string( uint16_to_string(lat));
+       app_write_string( uint16_to_string(to));
       }
       break;
       
