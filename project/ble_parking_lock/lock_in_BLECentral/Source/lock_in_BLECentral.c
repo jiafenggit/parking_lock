@@ -102,7 +102,7 @@
 #define DEFAULT_RSSI_PERIOD                   1000
 
 // Whether to enable automatic parameter update request when a connection is formed
-#define DEFAULT_ENABLE_UPDATE_REQUEST         TRUE
+#define DEFAULT_ENABLE_UPDATE_REQUEST         FALSE
 
 // Minimum connection interval (units of 1.25ms) if automatic parameter update request is enabled
 #define DEFAULT_UPDATE_MIN_CONN_INTERVAL      800
@@ -120,7 +120,7 @@
 #define DEFAULT_PASSCODE                      19655
 
 // Default GAP pairing mode
-#define DEFAULT_PAIRING_MODE                  GAPBOND_PAIRING_MODE_WAIT_FOR_REQ
+#define DEFAULT_PAIRING_MODE                 GAPBOND_PAIRING_MODE_WAIT_FOR_REQ
 
 // Default MITM mode (TRUE to require passcode or OOB when pairing)
 #define DEFAULT_MITM_MODE                     FALSE
@@ -1336,7 +1336,7 @@ static uint8 lock_in_BLECentralEventCB( gapCentralRoleEvent_t *pEvent )
     case GAP_DEVICE_DISCOVERY_EVENT:
       {
         // discovery complete
-        simpleBLEScanning = FALSE;
+       simpleBLEScanning = FALSE;
         
        app_write_string("\r\n完成一个扫描周期!");
        if(simpleBLEState == BLE_STATE_IDLE)//如果是空闲状态就开启扫描

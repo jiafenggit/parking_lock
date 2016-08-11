@@ -124,7 +124,9 @@
 #define DEFAULT_ENABLE_UPDATE_REQUEST         TRUE
 
 // Connection Pause Peripheral time value (in seconds)
-#define DEFAULT_CONN_PAUSE_PERIPHERAL         6
+#define DEFAULT_CONN_PAUSE_PERIPHERAL         1
+
+#define  CONNECTED_OBJ_IS_INCORRECT_TIMEOUT   4000 //4s钟之后检查连接对象是否正确
 
 // Company Identifier: Texas Instruments Inc. (13)
 #define TI_COMPANY_ID                         0x000D
@@ -175,32 +177,28 @@ static gaprole_States_t gapProfileState = GAPROLE_INIT;
 static uint8 scanRspData[] =
 {
   // complete name
-  0x14,   // length of this data
+  17,   // length of this data
   GAP_ADTYPE_LOCAL_NAME_COMPLETE,
-  0x53,   // 'S'
-  0x69,   // 'i'
-  0x6d,   // 'm'
+  0x44,   // 'D'
+  0x47,   // 'G'
+  0x4a,   // 'J'
+  0x5f,   // '_'
   0x70,   // 'p'
-  0x6c,   // 'l'
-  0x65,   // 'e'
-  0x42,   // 'B'
-  0x4c,   // 'L'
-  0x45,   // 'E'
-  0x50,   // 'P'
-  0x65,   // 'e'
-  0x72,   // 'r'
-  0x69,   // 'i'
-  0x70,   // 'p'
-  0x68,   // 'h'
-  0x65,   // 'e'
-  0x72,   // 'r'
   0x61,   // 'a'
+  0x72,   // 'r'
+  0x6b,   // 'k'
+  0x69,   // 'i'
+  0x6e,   // 'n'
+  0x67,   // 'g'
+  0x5f,   // '_'
   0x6c,   // 'l'
-
+  0x6f,   // 'o'
+  0x63,   // 'c'
+  0x6b,   // 'k'
   // connection interval range
   0x05,   // length of this data
   GAP_ADTYPE_SLAVE_CONN_INTERVAL_RANGE,
-  LO_UINT16( DEFAULT_DESIRED_MIN_CONN_INTERVAL ),   // 100ms
+  LO_UINT16( DEFAULT_DESIRED_MIN_CONN_INTERVAL ),   // 1s
   HI_UINT16( DEFAULT_DESIRED_MIN_CONN_INTERVAL ),
   LO_UINT16( DEFAULT_DESIRED_MAX_CONN_INTERVAL ),   // 1s
   HI_UINT16( DEFAULT_DESIRED_MAX_CONN_INTERVAL ),
@@ -229,8 +227,8 @@ static uint8 advertData[] =
   LO_UINT16( PARAM_BLE_CAR_IN_PROFILE_SERV_UUID ),
   HI_UINT16( PARAM_BLE_CAR_IN_PROFILE_SERV_UUID ),
   0x02,
-  GAP_ADTYPE_SERVICE_DATA,
-  0x88
+  GAP_ADTYPE_POWER_LEVEL,
+  0x00
 };
 
 
@@ -239,12 +237,10 @@ static uint8 advertData[] =
 static uint8 attDeviceName[GAP_DEVICE_NAME_LEN] = "DGJ car in device";
 
 uint8 lock_in_addr[B_ADDR_LEN];
-uint8 control_addr[B_ADDR_LEN]={0x88,0x88,0x88,0xC6,0x0E,0x00};
+uint8 control_addr[B_ADDR_LEN];
 
-uint8 addr_update_flag=FALSE;//是否需要延长广播时间
-uint8 cur_conn_target=CUR_CONNET_TARGET_CONTROL;//当前广播或者连接对象
 
-uint8 adv_type=GAP_ADTYPE_ADV_IND;//GAP_ADTYPE_ADV_LDC_DIRECT_IND;
+uint8 adv_type=GAP_ADTYPE_ADV_IND;
 uint8 adv_direct_type=ADDRTYPE_PUBLIC;
 uint8 adv_channel=GAP_ADVCHAN_ALL;
 uint8 adv_filter=GAP_FILTER_POLICY_ALL;
@@ -265,7 +261,9 @@ static void simpleProfileChangeCB( uint8 paramID );
 static void simpleBLEPeripheral_HandleKeys( uint8 shift, uint8 keys );
 static void simpleBLEPeripheral_Handlebatt(uint8 batt);
 
-
+static void car_in_BLECentralPairStateCB( uint16 connHandle, uint8 state, uint8 status );
+static void car_in_BLECentralPasscodeCB( uint8 *deviceAddr, uint16 connectionHandle,
+                                        uint8 uiInputs, uint8 uiOutputs );
 static char *bdAddr2Str ( uint8 *pAddr );
 
 
@@ -283,8 +281,8 @@ static gapRolesCBs_t simpleBLEPeripheral_PeripheralCBs =
 // GAP Bond Manager Callbacks
 static gapBondCBs_t simpleBLEPeripheral_BondMgrCBs =
 {
-  NULL,                     // Passcode callback (not used by application)
-  NULL                      // Pairing / Bonding state Callback (not used by application)
+  car_in_BLECentralPasscodeCB,    // Passcode callback (not used by application)
+  car_in_BLECentralPairStateCB    // Pairing / Bonding state Callback (not used by application)
 };
 
 // Simple GATT Profile Callbacks
@@ -509,24 +507,30 @@ static void start_info_init()
    car_in.ble_active=CAR_HAS_PARKING_AUTHORITY;
    app_write_string("\r\n没有在snv发现权限信息,设置默认值!"); 
  }   
+
  
   advertData[9]=car_in.ble_active;
   GAPRole_SetParameter( GAPROLE_ADVERT_DATA, sizeof( advertData ), advertData );//更新广播数据
   
   GAPRole_GetParameter(GAPROLE_BD_ADDR, ownAddress);
+  own_addr_add_1_to_peer_addr(ownAddress,lock_in_addr);
+  
+  
   osal_memcpy(car_in.ble_id,ownAddress,B_ADDR_LEN);//保存自己的地址；
   car_in.ble_battery=100;//100%
-//
+
   lock_in.ble_active=CAR_HAS_PARKING_AUTHORITY;
   lock_in.ble_battery=100;
   osal_memcpy(lock_in.ble_id,lock_in_addr,B_ADDR_LEN);//id
-// 
+
   osal_memset(&park_time,0,sizeof(time_stamp_t));//时间默认0
   park_time.flag=TIME_FLAG_ENTER;
   
   SimpleProfile_SetParameter( PARAM_BLE_CAR_IN_CHAR, sizeof ( ble_device_t ), &car_in );
   SimpleProfile_SetParameter( PARAM_BLE_LOCK_IN_CHAR, sizeof ( ble_device_t ), &lock_in );
   SimpleProfile_SetParameter( PARAM_BLE_TIME_STAMP_CHAR, sizeof ( time_stamp_t ), &park_time );
+  
+  //GAPRole_SetParameter(GAPROLE_ADV_DIRECT_ADDR,B_ADDR_LEN,lock_in_addr);
 }
 
 /*
@@ -660,6 +664,33 @@ uint16 SimpleBLEPeripheral_ProcessEvent( uint8 task_id, uint16 events )
     
     hal_feed_watchdog();   
     return ( events ^ FEED_WATCH_DOG_EVT );
+  }
+  
+    if ( events & CONNECTED_OBJ_IS_INCORRECT_EVT )
+  {
+   uint16 min_con,max_con,to,lat;
+   
+   GAPRole_GetParameter( GAPROLE_MIN_CONN_INTERVAL,&min_con);
+   GAPRole_GetParameter( GAPROLE_MAX_CONN_INTERVAL,&max_con );
+   GAPRole_GetParameter( GAPROLE_SLAVE_LATENCY,&lat );
+   GAPRole_GetParameter( GAPROLE_TIMEOUT_MULTIPLIER,&to);
+   
+   app_write_string("\r\n当前链接参数:");
+   app_write_string( uint16_to_string(min_con));
+   app_write_string( uint16_to_string(max_con));
+   app_write_string( uint16_to_string(lat));
+   app_write_string( uint16_to_string(to)); 
+   
+   if( min_con!=max_con || max_con!=DEFAULT_DESIRED_MAX_CONN_INTERVAL || to!=DEFAULT_DESIRED_CONN_TIMEOUT ||lat!=DEFAULT_DESIRED_SLAVE_LATENCY)//连接对象错误
+   { 
+    app_write_string("!连接对象错误!准备断开连接!");
+    GAPRole_TerminateConnection();
+   }
+   else
+   {
+     app_write_string("!连接对象正确!");
+   }
+    return ( events ^ CONNECTED_OBJ_IS_INCORRECT_EVT );
   }
   
   
@@ -797,6 +828,69 @@ static void own_addr_add_1_to_peer_addr(uint8 *p_own_addr,uint8* p_peer_addr)
 }
 
 /*********************************************************************
+ * @fn      pairStateCB
+ *
+ * @brief   Pairing state callback.
+ *
+ * @return  none
+ */
+static void car_in_BLECentralPairStateCB( uint16 connHandle, uint8 state, uint8 status )
+{
+  if ( state == GAPBOND_PAIRING_STATE_STARTED )
+  {
+    app_write_string( "Pairing started");
+  }
+  else if ( state == GAPBOND_PAIRING_STATE_COMPLETE )
+  {
+    if ( status == SUCCESS )
+    {
+      app_write_string( "Pairing success");
+    }
+    else
+    {
+      app_write_string( "Pairing fail");
+    }
+  }
+  else if ( state == GAPBOND_PAIRING_STATE_BONDED )
+  {
+    if ( status == SUCCESS )
+    {
+      app_write_string( "Bonding success");
+    }
+  }
+}
+
+/*********************************************************************
+ * @fn      car_in_BLECentralPasscodeCB
+ *
+ * @brief   Passcode callback.
+ *
+ * @return  none
+ */
+static void car_in_BLECentralPasscodeCB( uint8 *deviceAddr, uint16 connectionHandle,
+                                        uint8 uiInputs, uint8 uiOutputs )
+{
+  uint32  passcode;
+  uint8   str[7];
+
+  // Create random passcode
+  //LL_Rand( ((uint8 *) &passcode), sizeof( uint32 ));
+  //passcode %= 1000000;
+   passcode=201608;//固定密码
+  // Display passcode to user
+  if ( uiOutputs != 0 )
+  {
+    app_write_string( "Passcode:" );
+    app_write_string( (char *) _ltoa(passcode, str, 10));
+  }
+  
+  // Send passcode response
+  GAPBondMgr_PasscodeRsp( connectionHandle, SUCCESS, passcode );
+}
+
+
+
+/*********************************************************************
  * @fn      peripheralStateNotificationCB
  *
  * @brief   Notification from the profile of a state change.
@@ -836,8 +930,7 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
         systemId[5] = ownAddress[3];
 
         DevInfo_SetParameter(DEVINFO_SYSTEM_ID, DEVINFO_SYSTEM_ID_LEN, systemId);
-
-        own_addr_add_1_to_peer_addr(ownAddress,lock_in_addr);
+       
         start_info_init();
         app_write_string("\r\n外设初始化完毕!地址为:");
         app_write_string( bdAddr2Str( ownAddress ));
@@ -845,7 +938,7 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
         app_write_string( bdAddr2Str( lock_in_addr));
         //app_write_string("\r\n目标control地址为:");
         //app_write_string( bdAddr2Str( control_addr));
-      
+        
         //GAPRole_SetParameter(GAPROLE_ADV_DIRECT_ADDR,B_ADDR_LEN,control_addr);
         //GAPRole_SetParameter( GAPROLE_ADVERT_DATA, sizeof( advertData ), advertData );
         //GAPRole_SetParameter( GAPROLE_ADVERT_DATA, sizeof( advertData ), advertData );
@@ -867,6 +960,9 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
     case GAPROLE_CONNECTED:
       {   
         app_write_string("\r\n设备已连接!");
+        //启动连接对象检查定时器
+        osal_start_timerEx(simpleBLEPeripheral_TaskID,CONNECTED_OBJ_IS_INCORRECT_EVT,CONNECTED_OBJ_IS_INCORRECT_TIMEOUT);
+        
         
         osal_start_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT,LED1_PERIOD_FLASH_VALUE);//开始闪烁
         //addr_update_flag=TRUE;
@@ -910,6 +1006,7 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
         //GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn off Advertising
         app_write_string("\r\n链接被主动断开!");
         app_write_string("\r\n准备重新广播!");
+        osal_stop_timerEx(simpleBLEPeripheral_TaskID,CONNECTED_OBJ_IS_INCORRECT_EVT);//停止对象检查
         osal_stop_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT);//停止闪烁
         uint8 adv_enabled_status = TRUE;
         GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn off Advertising
@@ -929,10 +1026,11 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
       {
         app_write_string("\r\n连接通信超时!断开!");
         app_write_string("\r\n准备重新广播!");
+        osal_stop_timerEx(simpleBLEPeripheral_TaskID,CONNECTED_OBJ_IS_INCORRECT_EVT);//停止对象检查
         osal_stop_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT);//停止闪烁
         
         uint8 adv_enabled_status = TRUE;
-        GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn off Advertising
+        GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn on Advertising
         /*
         #if (defined HAL_LCD) && (HAL_LCD == TRUE)
           HalLcdWriteString( "Timed Out",  HAL_LCD_LINE_3 );
@@ -954,6 +1052,13 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
         #endif // (defined HAL_LCD) && (HAL_LCD == TRUE)
         */
         app_write_string("\r\n广播出错!");
+        app_write_string("\r\n准备重新广播!");
+        osal_stop_timerEx(simpleBLEPeripheral_TaskID,CONNECTED_OBJ_IS_INCORRECT_EVT);//停止对象检查
+        osal_stop_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT);//停止闪烁
+        
+        uint8 adv_enabled_status = TRUE;
+        GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn on Advertising
+        
       }
       break;
 
@@ -965,6 +1070,12 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
         #endif // (defined HAL_LCD) && (HAL_LCD == TRUE)
         */
          app_write_string("\r\n其他出错!");
+         app_write_string("\r\n准备重新广播!");
+        osal_stop_timerEx(simpleBLEPeripheral_TaskID,CONNECTED_OBJ_IS_INCORRECT_EVT);//停止对象检查
+        osal_stop_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT);//停止闪烁
+        
+        uint8 adv_enabled_status = TRUE;
+        GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn on Advertising
       }
       break;
 

@@ -70,6 +70,7 @@ extern "C"
    
 #define FEED_WATCH_DOG_EVT                                0x0010
    
+#define CONNECTED_OBJ_IS_INCORRECT_EVT                    0x0020
    
    
    
