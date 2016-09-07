@@ -602,7 +602,9 @@ uint16 SimpleBLEPeripheral_ProcessEvent( uint8 task_id, uint16 events )
 
     if ( events & LED1_PERIOD_FLASH_EVT )
   {
+    if(gapProfileState==GAPROLE_CONNECTED)//如果当前依然是连接状态就开启下一次闪烁
     osal_start_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT,LED1_PERIOD_FLASH_VALUE);
+    
     HalLedSet(HAL_LED_1,HAL_LED_MODE_BLINK);
     
     return ( events ^ LED1_PERIOD_FLASH_EVT );
@@ -907,7 +909,7 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
         app_write_string("\r\n链接被主动断开!");
         app_write_string("\r\n准备重新广播!");
         osal_stop_timerEx(simpleBLEPeripheral_TaskID,CONNECTED_OBJ_IS_INCORRECT_EVT);//停止对象检查
-        osal_stop_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT);//停止闪烁
+        //osal_stop_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT);//停止闪烁
         uint8 adv_enabled_status = TRUE;
         GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn off Advertising
         
@@ -919,7 +921,7 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
         app_write_string("\r\n连接通信超时!断开!");
         app_write_string("\r\n准备重新广播!");
         osal_stop_timerEx(simpleBLEPeripheral_TaskID,CONNECTED_OBJ_IS_INCORRECT_EVT);//停止对象检查
-        osal_stop_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT);//停止闪烁
+        //osal_stop_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT);//停止闪烁
         
         uint8 adv_enabled_status = TRUE;
         GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn on Advertising
@@ -933,7 +935,7 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
         app_write_string("\r\n广播出错!");
         app_write_string("\r\n准备重新广播!");
         osal_stop_timerEx(simpleBLEPeripheral_TaskID,CONNECTED_OBJ_IS_INCORRECT_EVT);//停止对象检查
-        osal_stop_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT);//停止闪烁
+        //osal_stop_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT);//停止闪烁
         
         uint8 adv_enabled_status = TRUE;
         GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn on Advertising
@@ -947,7 +949,7 @@ static void peripheralStateNotificationCB( gaprole_States_t newState )
         app_write_string("\r\n其他出错!");
         app_write_string("\r\n准备重新广播!");
         osal_stop_timerEx(simpleBLEPeripheral_TaskID,CONNECTED_OBJ_IS_INCORRECT_EVT);//停止对象检查
-        osal_stop_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT);//停止闪烁
+        //osal_stop_timerEx(simpleBLEPeripheral_TaskID,LED1_PERIOD_FLASH_EVT);//停止闪烁
         
         uint8 adv_enabled_status = TRUE;
         GAPRole_SetParameter(GAPROLE_ADVERT_ENABLED, sizeof(uint8), &adv_enabled_status); // Turn on Advertising
